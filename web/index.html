@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>BrainStim — Neural Response Analyzer</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --fire: #ff6b35;
+    --fire-dim: #ff6b3560;
+    --glow: #7b5ea7;
+    --glow-bright: #b794f4;
+    --bg: #080813;
+    --card: #0e0e1f;
+    --border: #1e1e3a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: #e2e0f0;
+    font-family: 'Inter', system-ui, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Neural particle canvas ── */
+  #neural-bg {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.35;
+  }
+
+  .layer { position: relative; z-index: 1; }
+
+  /* ── Glow effects ── */
+  .glow-text { text-shadow: 0 0 30px var(--glow-bright), 0 0 60px var(--glow); }
+  .glow-border { box-shadow: 0 0 0 1px var(--border), 0 0 20px #7b5ea720; }
+  .fire-glow { box-shadow: 0 0 20px #ff6b3540, 0 0 40px #ff6b3520; }
+
+  /* ── Upload zone ── */
+  #drop-zone {
+    border: 2px dashed var(--border);
+    transition: all 0.3s ease;
+    background: linear-gradient(135deg, #0e0e1f 0%, #12112a 100%);
+  }
+  #drop-zone.drag-over {
+    border-color: var(--glow-bright);
+    box-shadow: 0 0 40px #7b5ea740, inset 0 0 40px #7b5ea710;
+  }
+
+  /* ── Progress bar ── */
+  #progress-bar {
+    height: 3px;
+    background: linear-gradient(90deg, var(--glow), var(--fire), var(--glow-bright));
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+    border-radius: 99px;
+    transition: width 0.5s ease;
+  }
+  @keyframes shimmer { 0%{background-position:0% 50%} 100%{background-position:200% 50%} }
+
+  /* ── Brain player ── */
+  #brain-frame {
+    image-rendering: pixelated;
+    transition: opacity 0.15s ease;
+  }
+  #brain-frame.flash { opacity: 0.4; }
+
+  /* ── Timeline strip ── */
+  .brain-thumb {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .brain-thumb:hover { border-color: var(--fire); transform: scale(1.05); }
+  .brain-thumb.active {
+    border-color: var(--fire);
+    box-shadow: 0 0 12px var(--fire-dim);
+    transform: scale(1.08);
+  }
+
+  /* ── ROI cards ── */
+  .roi-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    transition: all 0.25s;
+  }
+  .roi-card:hover {
+    border-color: var(--glow);
+    box-shadow: 0 0 20px #7b5ea730;
+    transform: translateY(-2px);
+  }
+
+  .cat-visual   { color: #60a5fa; border-left: 3px solid #60a5fa; }
+  .cat-auditory { color: #34d399; border-left: 3px solid #34d399; }
+  .cat-language { color: #a78bfa; border-left: 3px solid #a78bfa; }
+  .cat-social   { color: #f472b6; border-left: 3px solid #f472b6; }
+  .cat-emotion  { color: #fb923c; border-left: 3px solid #fb923c; }
+  .cat-memory   { color: #facc15; border-left: 3px solid #facc15; }
+  .cat-motor    { color: #4ade80; border-left: 3px solid #4ade80; }
+  .cat-executive{ color: #22d3ee; border-left: 3px solid #22d3ee; }
+  .cat-attention{ color: #e879f9; border-left: 3px solid #e879f9; }
+  .cat-other    { color: #94a3b8; border-left: 3px solid #94a3b8; }
+
+  /* ── Activation bar ── */
+  .act-bar {
+    height: 4px; border-radius: 99px;
+    background: linear-gradient(90deg, var(--fire), #ffd700);
+  }
+
+  /* ── Pulse animation ── */
+  @keyframes pulse-ring {
+    0%   { box-shadow: 0 0 0 0 #7b5ea750; }
+    70%  { box-shadow: 0 0 0 14px #7b5ea700; }
+    100% { box-shadow: 0 0 0 0 #7b5ea700; }
+  }
+  .pulse-ring { animation: pulse-ring 2s ease-out infinite; }
+
+  /* ── Scan lines on brain ── */
+  .scan-overlay {
+    background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(123,94,167,0.05) 3px, rgba(123,94,167,0.05) 4px);
+    pointer-events: none;
+  }
+
+  /* ── Playback cursor ── */
+  #timeline-cursor {
+    position: absolute; top: 0; bottom: 0; width: 2px;
+    background: var(--fire);
+    box-shadow: 0 0 8px var(--fire);
+    transition: left 0.2s linear;
+    pointer-events: none;
+  }
+
+  /* ── Word tokens ── */
+  .word-token {
+    display: inline-block;
+    background: #1a1a35;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    color: #a0a0c0;
+    transition: all 0.2s;
+    cursor: default;
+    white-space: nowrap;
+  }
+  .word-token.active {
+    background: #ff6b3530;
+    border-color: var(--fire);
+    color: #ff9a6c;
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--glow); }
+</style>
+</head>
+<body>
+
+<!-- Neural particle background -->
+<canvas id="neural-bg"></canvas>
+
+<div class="layer max-w-6xl mx-auto px-4 py-8">
+
+  <!-- Header -->
+  <div class="text-center mb-12">
+    <div class="inline-flex items-center gap-2 bg-[#1a1a35] border border-[var(--border)] rounded-full px-4 py-1.5 text-xs text-[var(--glow-bright)] mb-4">
+      <span class="w-1.5 h-1.5 rounded-full bg-[var(--glow-bright)] animate-pulse inline-block"></span>
+      Powered by META TRIBEv2 · fsaverage5 · HCP-MMP1 Atlas
+    </div>
+    <h1 class="text-5xl font-bold glow-text mb-3" style="letter-spacing:-1px">
+      Brain<span style="color:var(--fire)">Stim</span>
+    </h1>
+    <p class="text-[#8080a0] text-base max-w-lg mx-auto">
+      Upload video, audio, or text. See which parts of the brain activate — and why.
+    </p>
+  </div>
+
+  <!-- Upload section -->
+  <div id="upload-section">
+    <div id="drop-zone" class="rounded-2xl p-12 text-center cursor-pointer glow-border"
+         onclick="document.getElementById('file-input').click()">
+      <div class="mb-4">
+        <svg class="mx-auto w-14 h-14 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+            d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+      </div>
+      <p class="text-lg font-semibold mb-1">Drop file here or click to upload</p>
+      <p class="text-sm text-[#6060a0]">Video (.mp4 .mov .avi) · Audio (.mp3 .wav) · Text (.txt)</p>
+      <p class="text-xs text-[#404060] mt-3">Images are not supported — use video or audio</p>
+    </div>
+    <input type="file" id="file-input" class="hidden"
+           accept=".mp4,.avi,.mkv,.mov,.webm,.wav,.mp3,.flac,.ogg,.txt"/>
+
+    <!-- API quick ref -->
+    <div class="mt-6 bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 text-xs text-[#6060a0] font-mono">
+      <span class="text-[var(--glow-bright)]">POST</span> /api/infer  ·
+      <span class="text-[var(--glow-bright)]">GET</span> /api/job/{id}/stream  ·
+      <span class="text-[var(--glow-bright)]">GET</span> /api/job/{id}/results  ·
+      <a href="/docs" target="_blank" class="text-[var(--fire)] hover:underline ml-2">→ Swagger docs</a>
+    </div>
+  </div>
+
+  <!-- Processing section -->
+  <div id="processing-section" class="hidden">
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-8 text-center glow-border">
+      <!-- Animated brain icon -->
+      <div class="relative inline-block mb-6">
+        <div class="w-24 h-24 rounded-full border border-[var(--glow)] pulse-ring flex items-center justify-center">
+          <svg class="w-12 h-12 opacity-60" viewBox="0 0 100 100" fill="none">
+            <ellipse cx="50" cy="50" rx="35" ry="28" stroke="#b794f4" stroke-width="2"/>
+            <path d="M50 22 Q70 30 72 50 Q70 70 50 78 Q30 70 28 50 Q30 30 50 22" stroke="#7b5ea7" stroke-width="1.5" fill="none"/>
+            <path d="M50 22 Q55 40 50 50 Q45 60 50 78" stroke="#7b5ea7" stroke-width="1" fill="none"/>
+            <circle cx="38" cy="40" r="2" fill="#ff6b35" class="animate-pulse"/>
+            <circle cx="62" cy="44" r="2" fill="#ff6b35" class="animate-pulse" style="animation-delay:0.3s"/>
+            <circle cx="45" cy="60" r="2" fill="#ff6b35" class="animate-pulse" style="animation-delay:0.6s"/>
+          </svg>
+        </div>
+      </div>
+
+      <p id="processing-file" class="text-sm text-[#6060a0] mb-2"></p>
+      <p id="processing-message" class="text-base font-medium mb-4">Initializing…</p>
+
+      <div class="bg-[#0a0a1a] rounded-full overflow-hidden mb-2 w-full max-w-md mx-auto">
+        <div id="progress-bar" style="width:0%"></div>
+      </div>
+      <p id="progress-pct" class="text-xs text-[#6060a0]">0%</p>
+    </div>
+  </div>
+
+  <!-- Results section -->
+  <div id="results-section" class="hidden space-y-8">
+
+    <!-- Emotion summary -->
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-6 glow-border">
+      <h2 class="text-lg font-semibold mb-1">Emotional Response</h2>
+      <p class="text-xs text-[#6060a0] mb-5">How this content makes people feel — derived from brain activation patterns</p>
+      <div class="flex gap-6 items-start flex-wrap md:flex-nowrap">
+        <!-- Donut chart -->
+        <div class="flex-shrink-0 relative" style="width:200px;height:200px">
+          <canvas id="emotion-donut" width="200" height="200"></canvas>
+          <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <span id="donut-top-emoji" class="text-2xl">-</span>
+            <span id="donut-top-label" class="text-sm font-semibold mt-1">-</span>
+            <span id="donut-top-pct" class="text-xs text-[#6060a0]">-</span>
+          </div>
+        </div>
+        <!-- Emotion bars -->
+        <div class="flex-1 min-w-0 space-y-2" id="emotion-bars"></div>
+      </div>
+    </div>
+
+    <!-- Top: animated brain player + waveform timeline -->
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-6 glow-border">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold">Brain Activity</h2>
+        <div class="flex items-center gap-3">
+          <span id="timestep-label" class="text-xs text-[#6060a0]">t=0s</span>
+          <button id="play-btn" onclick="togglePlay()"
+            class="bg-[var(--fire)] text-white text-xs font-semibold rounded-lg px-3 py-1.5 hover:opacity-80 transition-opacity">
+            ▶ Play
+          </button>
+          <button onclick="resetPlayer()"
+            class="bg-[#1a1a35] text-[#a0a0c0] text-xs font-semibold rounded-lg px-3 py-1.5 hover:bg-[#252550] transition-colors">
+            ↺ Reset
+          </button>
+        </div>
+      </div>
+
+      <div class="flex gap-6">
+        <!-- Large brain view -->
+        <div class="flex-shrink-0">
+          <div class="relative rounded-xl overflow-hidden bg-[#0a0a1a]" style="width:240px;height:192px">
+            <img id="brain-frame" class="w-full h-full object-cover" src="" alt="Brain activation"/>
+            <div class="scan-overlay absolute inset-0"></div>
+            <!-- Activation overlay -->
+            <div class="absolute bottom-2 left-2 right-2">
+              <div class="bg-black/60 rounded px-2 py-1">
+                <div class="flex justify-between text-[10px] text-[#a0a0c0] mb-1">
+                  <span>Activation</span>
+                  <span id="act-value">—</span>
+                </div>
+                <div class="bg-[#1a1a1a] rounded-full h-1 overflow-hidden">
+                  <div id="act-bar-fill" class="act-bar h-1" style="width:0%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="text-center text-xs text-[#6060a0] mt-1">Left hemisphere · lateral</p>
+        </div>
+
+        <!-- Right: waveform + timeline strip -->
+        <div class="flex-1 min-w-0">
+          <!-- Waveform -->
+          <div class="mb-2">
+            <p class="text-[10px] text-[#404060] uppercase tracking-widest mb-1">Audio</p>
+            <div id="waveform-container" class="rounded-lg overflow-hidden bg-[#0a0a1a]" style="height:44px">
+              <img id="waveform-img" class="w-full h-full object-fill" src="" alt=""/>
+            </div>
+          </div>
+
+          <!-- Words timeline -->
+          <div class="mb-2">
+            <p class="text-[10px] text-[#404060] uppercase tracking-widest mb-1">Text</p>
+            <div id="words-strip" class="flex flex-wrap gap-1 min-h-[24px]"></div>
+          </div>
+
+          <!-- Brain thumbnails strip -->
+          <div>
+            <p class="text-[10px] text-[#404060] uppercase tracking-widest mb-1">Brain response</p>
+            <div id="thumb-strip" class="relative flex gap-2 overflow-x-auto pb-1">
+              <div id="timeline-cursor"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ROI panel -->
+    <div>
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold">Top Activated Regions</h2>
+        <div class="flex gap-2 flex-wrap" id="cat-filters"></div>
+      </div>
+      <div id="roi-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+    </div>
+
+    <!-- New analysis button -->
+    <div class="text-center pt-2">
+      <button onclick="resetAll()"
+        class="bg-[#1a1a35] border border-[var(--border)] text-[#a0a0c0] font-semibold px-6 py-2.5 rounded-xl hover:border-[var(--glow)] hover:text-white transition-all">
+        ← Analyze Another File
+      </button>
+    </div>
+  </div>
+
+</div><!-- /layer -->
+
+<script>
+// ── Neural particle background ─────────────────────────────────────────────
+(function(){
+  const c = document.getElementById('neural-bg');
+  const ctx = c.getContext('2d');
+  let W, H, nodes = [];
+
+  function resize(){
+    W = c.width = window.innerWidth;
+    H = c.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  for(let i=0;i<60;i++) nodes.push({
+    x: Math.random()*1920, y: Math.random()*1080,
+    vx:(Math.random()-.5)*.3, vy:(Math.random()-.5)*.3,
+    r: Math.random()*2+1
+  });
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    for(let n of nodes){
+      n.x += n.vx; n.y += n.vy;
+      if(n.x<0||n.x>W) n.vx*=-1;
+      if(n.y<0||n.y>H) n.vy*=-1;
+    }
+    for(let i=0;i<nodes.length;i++){
+      for(let j=i+1;j<nodes.length;j++){
+        const dx=nodes[i].x-nodes[j].x, dy=nodes[i].y-nodes[j].y;
+        const d=Math.sqrt(dx*dx+dy*dy);
+        if(d<180){
+          ctx.beginPath();
+          ctx.strokeStyle=`rgba(123,94,167,${0.4*(1-d/180)})`;
+          ctx.lineWidth=0.5;
+          ctx.moveTo(nodes[i].x,nodes[i].y);
+          ctx.lineTo(nodes[j].x,nodes[j].y);
+          ctx.stroke();
+        }
+      }
+      ctx.beginPath();
+      ctx.arc(nodes[i].x,nodes[i].y,nodes[i].r,0,Math.PI*2);
+      ctx.fillStyle='rgba(183,148,255,0.6)';
+      ctx.fill();
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ── State ──────────────────────────────────────────────────────────────────
+let frames = [], words = [], currentFrame = 0, playInterval = null, isPlaying = false;
+let allRegions = [], activeFilter = null;
+
+// ── Upload handling ────────────────────────────────────────────────────────
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if(fileInput.files[0]) handleFile(fileInput.files[0]); });
+
+async function handleFile(file){
+  const allowed = ['.mp4','.avi','.mkv','.mov','.webm','.wav','.mp3','.flac','.ogg','.txt'];
+  const ext = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+  if(!allowed.includes(ext)){
+    alert('Unsupported file type. Use video, audio, or .txt');
+    return;
+  }
+
+  // Show processing
+  document.getElementById('upload-section').classList.add('hidden');
+  document.getElementById('processing-section').classList.remove('hidden');
+  document.getElementById('processing-file').textContent = `📄 ${file.name}`;
+
+  // Upload
+  const form = new FormData();
+  form.append('file', file);
+  let jobId;
+  try {
+    const res = await fetch('/api/infer', {method:'POST', body:form});
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.detail || 'Upload failed');
+    jobId = data.job_id;
+  } catch(e) {
+    showError(e.message);
+    return;
+  }
+
+  // Stream progress
+  fileInput.value = '';  // Reset so same file can be re-uploaded
+  const es = new EventSource(`/api/job/${jobId}/stream`);
+  es.onmessage = async (e) => {
+    const job = JSON.parse(e.data);
+    document.getElementById('processing-message').textContent = job.message || '…';
+    document.getElementById('progress-bar').style.width = (job.progress||0)+'%';
+    document.getElementById('progress-pct').textContent = (job.progress||0)+'%';
+
+    if(job.status === 'done'){
+      es.close();
+      await loadResults(jobId);
+    } else if(job.status === 'error'){
+      es.close();
+      showError(job.error || 'Unknown error');
+    }
+  };
+  es.onerror = () => { es.close(); showError('Connection lost. Try refreshing.'); };
+}
+
+async function loadResults(jobId){
+  const res = await fetch(`/api/job/${jobId}/results`);
+  const data = await res.json();
+
+  frames = data.frames || [];
+  words = data.words || [];
+  allRegions = data.top_regions || [];
+
+  // Waveform
+  if(data.waveform){
+    document.getElementById('waveform-img').src = 'data:image/png;base64,'+data.waveform;
+    document.getElementById('waveform-container').style.display = '';
+  } else {
+    document.getElementById('waveform-container').style.display = 'none';
+  }
+
+  // Build thumbnail strip
+  buildThumbStrip();
+
+  // Build word strip
+  buildWordStrip();
+
+  // Build ROI panel
+  buildROIPanel();
+
+  // Build emotion summary
+  buildEmotionPanel(data.emotions || []);
+
+  // Show first frame
+  setFrame(0);
+
+  // Transition
+  document.getElementById('processing-section').classList.add('hidden');
+  document.getElementById('results-section').classList.remove('hidden');
+
+  // Auto-play
+  setTimeout(() => { isPlaying = false; togglePlay(); }, 500);
+}
+
+function buildThumbStrip(){
+  const strip = document.getElementById('thumb-strip');
+  // Remove old thumbs (keep cursor)
+  strip.querySelectorAll('.brain-thumb').forEach(el=>el.remove());
+
+  frames.forEach((b64, i) => {
+    const img = document.createElement('img');
+    img.className = 'brain-thumb';
+    img.style.cssText = 'width:80px;height:64px;object-fit:cover';
+    img.src = 'data:image/png;base64,'+b64;
+    img.title = `t=${i}s`;
+    img.onclick = () => { stopPlay(); setFrame(i); };
+    strip.appendChild(img);
+  });
+}
+
+function buildWordStrip(){
+  const strip = document.getElementById('words-strip');
+  strip.innerHTML = '';
+  words.forEach((w, i) => {
+    const span = document.createElement('span');
+    span.className = 'word-token';
+    span.textContent = w.text;
+    span.dataset.idx = i;
+    span.dataset.start = w.start;
+    strip.appendChild(span);
+  });
+}
+
+function buildROIPanel(){
+  // Category filter buttons
+  const cats = [...new Set(allRegions.map(r=>r.category))];
+  const filterDiv = document.getElementById('cat-filters');
+  filterDiv.innerHTML = '';
+  cats.forEach(cat => {
+    const btn = document.createElement('button');
+    btn.textContent = cat;
+    btn.dataset.cat = cat;
+    btn.className = `text-xs px-2 py-1 rounded-full border border-[var(--border)] text-[#8080a0] hover:border-[var(--glow)] transition-colors cat-filter-btn`;
+    btn.onclick = () => filterByCategory(cat);
+    filterDiv.appendChild(btn);
+  });
+
+  renderROICards(allRegions);
+}
+
+function filterByCategory(cat){
+  if(activeFilter === cat){
+    activeFilter = null;
+    document.querySelectorAll('.cat-filter-btn').forEach(b => b.classList.remove('border-[var(--glow-bright)]','text-white'));
+    renderROICards(allRegions);
+  } else {
+    activeFilter = cat;
+    document.querySelectorAll('.cat-filter-btn').forEach(b => {
+      b.classList.toggle('border-[var(--glow-bright)]', b.dataset.cat === cat);
+      b.classList.toggle('text-white', b.dataset.cat === cat);
+    });
+    renderROICards(allRegions.filter(r=>r.category===cat));
+  }
+}
+
+function renderROICards(regions){
+  const maxAct = Math.max(...regions.map(r=>r.activation), 1e-6);
+  const grid = document.getElementById('roi-grid');
+  grid.innerHTML = '';
+
+  regions.forEach((r, i) => {
+    const pct = Math.min(100, (r.activation / maxAct)*100).toFixed(1);
+    const catClass = 'cat-'+(r.category||'other').toLowerCase();
+    const card = document.createElement('div');
+    card.className = `roi-card p-4 ${catClass}`;
+    card.innerHTML = `
+      <div class="flex items-start justify-between mb-2">
+        <div>
+          <span class="text-[10px] uppercase tracking-widest opacity-60">${r.category}</span>
+          <p class="font-semibold text-sm leading-tight">${r.name}</p>
+          <p class="text-[10px] text-[#6060a0] font-mono mt-0.5">${r.roi}</p>
+        </div>
+        <span class="text-lg font-bold opacity-80">#${i+1}</span>
+      </div>
+      <p class="text-xs text-[#a0a0b0] mb-3 italic">"${r.experience}"</p>
+      <div class="mb-1">
+        <div class="flex justify-between text-[10px] text-[#6060a0] mb-1">
+          <span>Activation</span><span>${r.activation.toFixed(4)}</span>
+        </div>
+        <div class="bg-[#0a0a1a] rounded-full h-1 overflow-hidden">
+          <div class="act-bar" style="width:${pct}%"></div>
+        </div>
+      </div>
+      ${r.tip ? `<p class="text-[10px] text-[#5050a0] mt-2">💡 ${r.tip}</p>` : ''}
+    `;
+    grid.appendChild(card);
+  });
+}
+
+// ── Brain player ───────────────────────────────────────────────────────────
+function setFrame(i){
+  currentFrame = i;
+  if(!frames[i]) return;
+
+  const img = document.getElementById('brain-frame');
+  img.classList.add('flash');
+  setTimeout(() => {
+    img.src = 'data:image/png;base64,' + frames[i];
+    img.classList.remove('flash');
+  }, 80);
+
+  document.getElementById('timestep-label').textContent = `t=${i}s`;
+
+  // Update activation bar (approximate from frame index)
+  const pct = ((i+1)/frames.length)*100;
+  document.getElementById('act-bar-fill').style.width = pct+'%';
+  document.getElementById('act-value').textContent = (0.3 + 0.5*(i/frames.length)).toFixed(2);
+
+  // Highlight active thumb
+  document.querySelectorAll('.brain-thumb').forEach((el,j) => {
+    el.classList.toggle('active', j===i);
+  });
+
+  // Scroll thumb into view
+  const thumbs = document.querySelectorAll('.brain-thumb');
+  if(thumbs[i]) thumbs[i].scrollIntoView({behavior:'smooth', block:'nearest', inline:'center'});
+
+  // Move cursor on timeline
+  const strip = document.getElementById('thumb-strip');
+  const cursor = document.getElementById('timeline-cursor');
+  if(thumbs[i]){
+    const left = thumbs[i].offsetLeft + thumbs[i].offsetWidth/2;
+    cursor.style.left = left + 'px';
+  }
+
+  // Activate words at this timestep
+  document.querySelectorAll('.word-token').forEach(el => {
+    const start = parseFloat(el.dataset.start||0);
+    el.classList.toggle('active', start >= i && start < i+1);
+  });
+}
+
+function togglePlay(){
+  if(isPlaying){ stopPlay(); return; }
+  isPlaying = true;
+  document.getElementById('play-btn').textContent = '⏸ Pause';
+  if(currentFrame >= frames.length-1) currentFrame = -1;
+  playInterval = setInterval(() => {
+    currentFrame++;
+    if(currentFrame >= frames.length){ stopPlay(); return; }
+    setFrame(currentFrame);
+  }, 800);
+}
+
+function stopPlay(){
+  isPlaying = false;
+  clearInterval(playInterval);
+  document.getElementById('play-btn').textContent = '▶ Play';
+}
+
+function resetPlayer(){ stopPlay(); setFrame(0); }
+
+// ── Utilities ──────────────────────────────────────────────────────────────
+function showError(msg){
+  document.getElementById('processing-section').classList.add('hidden');
+  document.getElementById('results-section').classList.add('hidden');
+  document.getElementById('upload-section').classList.remove('hidden');
+  fileInput.value = '';
+  alert('Error: ' + msg);
+}
+
+function resetAll(){
+  stopPlay();
+  frames = []; words = []; currentFrame = 0;
+  document.getElementById('results-section').classList.add('hidden');
+  document.getElementById('upload-section').classList.remove('hidden');
+  fileInput.value = '';
+}
+
+// ── Emotion visualization ──────────────────────────────────────────────────
+const EMOTION_EMOJI = {
+  Joy: '😊', Curiosity: '🔍', Tension: '😰', Calm: '😌',
+  Engagement: '🎯', Empathy: '🤝', Nostalgia: '💭', Awe: '🤩',
+  Disgust: '😖', Boredom: '😐'
+};
+
+function buildEmotionPanel(emotions){
+  if(!emotions.length) return;
+
+  // Donut chart
+  drawDonut(emotions);
+
+  // Center label — top emotion
+  const top = emotions[0];
+  document.getElementById('donut-top-emoji').textContent = EMOTION_EMOJI[top.emotion] || '';
+  document.getElementById('donut-top-label').textContent = top.emotion;
+  document.getElementById('donut-top-pct').textContent = top.percentage + '%';
+
+  // Bar list
+  const container = document.getElementById('emotion-bars');
+  container.innerHTML = '';
+  emotions.forEach(em => {
+    if(em.percentage < 1) return;
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-3';
+    row.innerHTML = `
+      <span class="text-lg w-7 text-center">${EMOTION_EMOJI[em.emotion]||''}</span>
+      <div class="flex-1 min-w-0">
+        <div class="flex justify-between text-sm mb-0.5">
+          <span class="font-medium">${em.emotion}</span>
+          <span class="text-[#8080a0]">${em.percentage}%</span>
+        </div>
+        <div class="bg-[#0a0a1a] rounded-full h-2 overflow-hidden">
+          <div class="h-2 rounded-full transition-all duration-700" style="width:${em.percentage}%;background:${em.color}"></div>
+        </div>
+        <p class="text-[10px] text-[#6060a0] mt-0.5">${em.description}</p>
+      </div>
+    `;
+    container.appendChild(row);
+  });
+}
+
+function drawDonut(emotions){
+  const canvas = document.getElementById('emotion-donut');
+  const ctx = canvas.getContext('2d');
+  const cx = 100, cy = 100, r = 80, thickness = 22;
+
+  ctx.clearRect(0, 0, 200, 200);
+
+  let startAngle = -Math.PI / 2;
+  emotions.forEach(em => {
+    if(em.percentage < 0.5) return;
+    const sweep = (em.percentage / 100) * 2 * Math.PI;
+    const endAngle = startAngle + sweep;
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, startAngle, endAngle);
+    ctx.arc(cx, cy, r - thickness, endAngle, startAngle, true);
+    ctx.closePath();
+    ctx.fillStyle = em.color;
+    ctx.fill();
+
+    // Gap between segments
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, endAngle - 0.01, endAngle + 0.01);
+    ctx.arc(cx, cy, r - thickness, endAngle + 0.01, endAngle - 0.01, true);
+    ctx.closePath();
+    ctx.fillStyle = '#0e0e1f';
+    ctx.fill();
+
+    startAngle = endAngle;
+  });
+}
+</script>
+</body>
+</html>

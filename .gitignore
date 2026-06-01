@@ -1,0 +1,13 @@
+uploads/
+results/
+cache/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+*.egg-info/
+dist/
+.venv/
+venv/
+llama_check.log
+CLAUDE.md

@@ -1,0 +1,13 @@
+# Server
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+
+# Rendering
+matplotlib>=3.8.0
+numpy>=1.26.0
+soundfile>=0.12.0
+nilearn>=0.10.0
+
+# tribev2 is a peer dependency — install it separately from facebookresearch/tribev2
+# Once published to PyPI: tribev2>=0.1.0
