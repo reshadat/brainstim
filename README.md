@@ -18,12 +18,6 @@ Built on [META TRIBEv2](https://github.com/facebookresearch/thalamus), the state
 
 ---
 
-## Demo
-
-![Brain activation visualization](https://raw.githubusercontent.com/reshadat/brainstim/main/docs/demo.png)
-
----
-
 ## Setup
 
 ### Prerequisites
