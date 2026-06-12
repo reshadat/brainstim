@@ -5,25 +5,117 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>BrainStim — Neural Response Analyzer</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
     --fire: #ff6b35;
     --fire-dim: #ff6b3560;
     --glow: #7b5ea7;
     --glow-bright: #b794f4;
-    --bg: #080813;
+    --cyan: #4fd6ff;
+    --bg: #07070f;
     --card: #0e0e1f;
-    --border: #1e1e3a;
+    --border: #232348;
   }
 
   * { box-sizing: border-box; }
 
+  html { scroll-behavior: smooth; }
+
   body {
     background: var(--bg);
-    color: #e2e0f0;
+    color: #e7e5f5;
     font-family: 'Inter', system-ui, sans-serif;
     min-height: 100vh;
     overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Drifting aurora background ── */
+  #aurora {
+    position: fixed; inset: -20%; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(40% 50% at 18% 22%, #7b5ea755 0%, transparent 60%),
+      radial-gradient(38% 46% at 82% 18%, #ff6b3530 0%, transparent 60%),
+      radial-gradient(46% 50% at 70% 82%, #4fd6ff22 0%, transparent 62%),
+      radial-gradient(40% 44% at 25% 78%, #b794f42e 0%, transparent 60%);
+    filter: blur(36px) saturate(1.2);
+    animation: aurora-drift 26s ease-in-out infinite alternate;
+  }
+  @keyframes aurora-drift {
+    0%   { transform: translate3d(0,0,0) scale(1); }
+    50%  { transform: translate3d(2%, -2%, 0) scale(1.08); }
+    100% { transform: translate3d(-2%, 2%, 0) scale(1.04); }
+  }
+
+  /* ── Display font + gradient headings ── */
+  .font-display { font-family: 'Sora', 'Inter', sans-serif; letter-spacing: -0.02em; }
+  .text-gradient {
+    background: linear-gradient(110deg, #fff 8%, var(--glow-bright) 42%, var(--fire) 78%, #ffd27a 100%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent; color: transparent;
+    animation: hue-pan 8s linear infinite;
+  }
+  @keyframes hue-pan { 0%{background-position:0% 50%} 100%{background-position:220% 50%} }
+
+  /* ── Entrance animation ── */
+  @keyframes fade-up { from { opacity:0; transform: translateY(14px); } to { opacity:1; transform:none; } }
+  .fade-up { animation: fade-up .6s cubic-bezier(.2,.7,.2,1) both; }
+
+  /* ── Glass cards ── */
+  .glass {
+    background: linear-gradient(160deg, rgba(20,20,42,.72), rgba(12,12,28,.62));
+    border: 1px solid rgba(255,255,255,.06);
+    backdrop-filter: blur(14px) saturate(1.1);
+    -webkit-backdrop-filter: blur(14px) saturate(1.1);
+    box-shadow: 0 1px 0 rgba(255,255,255,.05) inset, 0 24px 60px -28px #000;
+  }
+
+  /* ── Gradient buttons ── */
+  .btn-primary {
+    background: linear-gradient(100deg, var(--fire), #ff924d);
+    color: #fff; border: none; border-radius: 12px; font-weight: 600;
+    box-shadow: 0 8px 26px -10px var(--fire), 0 0 0 1px #ffffff14 inset;
+    transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+  }
+  .btn-primary:hover { transform: translateY(-1px); filter: brightness(1.06); box-shadow: 0 12px 32px -10px var(--fire); }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-ghost {
+    background: rgba(255,255,255,.04); color: #c9c7e0;
+    border: 1px solid var(--border); border-radius: 12px; font-weight: 600;
+    transition: all .18s ease;
+  }
+  .btn-ghost:hover { border-color: var(--glow); color: #fff; background: rgba(123,94,167,.12); }
+
+  /* ── Sample stimulus cards ── */
+  .sample-card {
+    position: relative; cursor: pointer; overflow: hidden;
+    border-radius: 16px; padding: 18px;
+    background: linear-gradient(160deg, rgba(22,22,46,.7), rgba(12,12,28,.6));
+    border: 1px solid var(--border);
+    transition: transform .22s cubic-bezier(.2,.7,.2,1), border-color .22s, box-shadow .22s;
+  }
+  .sample-card::before {
+    content:''; position:absolute; inset:0; opacity:.0; transition: opacity .25s;
+    background: radial-gradient(120% 80% at 50% -20%, var(--accent, #7b5ea7), transparent 70%);
+  }
+  .sample-card:hover { transform: translateY(-4px); border-color: var(--accent, var(--glow)); box-shadow: 0 18px 40px -22px var(--accent, #7b5ea7); }
+  .sample-card:hover::before { opacity:.22; }
+  .sample-card .sc-icon {
+    width: 44px; height: 44px; border-radius: 12px; display:flex; align-items:center; justify-content:center;
+    font-size: 22px; background: rgba(255,255,255,.06); border: 1px solid var(--border);
+    box-shadow: 0 0 22px -6px var(--accent, #7b5ea7);
+  }
+
+  /* ── Simulation badge ── */
+  .sim-badge {
+    display:inline-flex; align-items:center; gap:6px;
+    background: linear-gradient(100deg, #4fd6ff22, #b794f422);
+    border: 1px solid #4fd6ff44; color: #9fe6ff;
+    border-radius: 999px; padding: 3px 11px; font-size: 11px; font-weight: 600;
   }
 
   /* ── Neural particle canvas ── */
@@ -163,54 +255,69 @@
 </head>
 <body>
 
-<!-- Neural particle background -->
+<!-- Drifting aurora + neural particle background -->
+<div id="aurora"></div>
 <canvas id="neural-bg"></canvas>
 
-<div class="layer max-w-6xl mx-auto px-4 py-8">
+<div class="layer max-w-6xl mx-auto px-4 py-10">
 
   <!-- Header -->
-  <div class="text-center mb-12">
-    <div class="inline-flex items-center gap-2 bg-[#1a1a35] border border-[var(--border)] rounded-full px-4 py-1.5 text-xs text-[var(--glow-bright)] mb-4">
+  <div class="text-center mb-10 fade-up">
+    <div class="inline-flex items-center gap-2 glass rounded-full px-4 py-1.5 text-xs text-[var(--glow-bright)] mb-5">
       <span class="w-1.5 h-1.5 rounded-full bg-[var(--glow-bright)] animate-pulse inline-block"></span>
       Powered by META TRIBEv2 · fsaverage5 · HCP-MMP1 Atlas
     </div>
-    <h1 class="text-5xl font-bold glow-text mb-3" style="letter-spacing:-1px">
-      Brain<span style="color:var(--fire)">Stim</span>
+    <h1 class="font-display text-6xl sm:text-7xl font-extrabold mb-4">
+      <span class="text-gradient">Brain</span><span class="text-gradient">Stim</span>
     </h1>
-    <p class="text-[#8080a0] text-base max-w-lg mx-auto">
-      Upload video, audio, or text. See which parts of the brain activate — and why.
+    <p class="text-[#9a98bd] text-lg max-w-xl mx-auto leading-relaxed">
+      Upload video, audio, or text — watch the cortex light up, region by region,
+      and discover <span class="text-[#cfc8ee]">how it makes a brain feel</span>.
     </p>
   </div>
 
   <!-- Upload section -->
-  <div id="upload-section">
-    <div id="drop-zone" class="rounded-2xl p-12 text-center cursor-pointer glow-border"
+  <div id="upload-section" class="fade-up" style="animation-delay:.08s">
+    <div id="drop-zone" class="rounded-2xl p-12 text-center cursor-pointer glass"
          onclick="document.getElementById('file-input').click()">
       <div class="mb-4">
-        <svg class="mx-auto w-14 h-14 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="mx-auto w-14 h-14 text-[var(--glow-bright)] opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
             d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
         </svg>
       </div>
-      <p class="text-lg font-semibold mb-1">Drop file here or click to upload</p>
-      <p class="text-sm text-[#6060a0]">Video (.mp4 .mov .avi) · Audio (.mp3 .wav) · Text (.txt)</p>
-      <p class="text-xs text-[#404060] mt-3">Images are not supported — use video or audio</p>
+      <p class="text-lg font-semibold mb-1">Drop a file here, or click to upload</p>
+      <p class="text-sm text-[#7c7ca8]">Video (.mp4 .mov .avi) · Audio (.mp3 .wav) · Text (.txt)</p>
+      <p class="text-xs text-[#4d4d72] mt-3">Images aren't supported — use video, audio, or text</p>
     </div>
     <input type="file" id="file-input" class="hidden"
            accept=".mp4,.avi,.mkv,.mov,.webm,.wav,.mp3,.flac,.ogg,.txt"/>
 
+    <!-- Sample gallery (simulation mode) -->
+    <div class="mt-10">
+      <div class="flex items-center justify-center gap-3 mb-1">
+        <span class="h-px w-10 bg-[var(--border)]"></span>
+        <p class="text-sm font-semibold text-[#cfc8ee]">Or try a live demo</p>
+        <span class="h-px w-10 bg-[var(--border)]"></span>
+      </div>
+      <p class="text-center text-xs text-[#6f6f9c] mb-5">
+        No model required — these run a full simulation with real cortical surface renders
+      </p>
+      <div id="sample-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"></div>
+    </div>
+
     <!-- API quick ref -->
-    <div class="mt-6 bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 text-xs text-[#6060a0] font-mono">
-      <span class="text-[var(--glow-bright)]">POST</span> /api/infer  ·
-      <span class="text-[var(--glow-bright)]">GET</span> /api/job/{id}/stream  ·
-      <span class="text-[var(--glow-bright)]">GET</span> /api/job/{id}/results  ·
-      <a href="/docs" target="_blank" class="text-[var(--fire)] hover:underline ml-2">→ Swagger docs</a>
+    <div class="mt-8 glass rounded-xl p-4 text-xs text-[#7c7ca8] font-mono text-center">
+      <span class="text-[var(--glow-bright)]">POST</span> /api/infer ·
+      <span class="text-[var(--glow-bright)]">POST</span> /api/demo ·
+      <span class="text-[var(--glow-bright)]">GET</span> /api/job/{id}/stream ·
+      <a href="/docs" target="_blank" class="text-[var(--fire)] hover:underline ml-1">→ Swagger docs</a>
     </div>
   </div>
 
   <!-- Processing section -->
-  <div id="processing-section" class="hidden">
-    <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-8 text-center glow-border">
+  <div id="processing-section" class="hidden fade-up">
+    <div class="glass rounded-2xl p-8 text-center">
       <!-- Animated brain icon -->
       <div class="relative inline-block mb-6">
         <div class="w-24 h-24 rounded-full border border-[var(--glow)] pulse-ring flex items-center justify-center">
@@ -225,7 +332,8 @@
         </div>
       </div>
 
-      <p id="processing-file" class="text-sm text-[#6060a0] mb-2"></p>
+      <p id="processing-file" class="text-sm text-[#7c7ca8] mb-2"></p>
+      <div id="processing-sim" class="hidden mb-3"><span class="sim-badge">✦ Simulation mode</span></div>
       <p id="processing-message" class="text-base font-medium mb-4">Initializing…</p>
 
       <div class="bg-[#0a0a1a] rounded-full overflow-hidden mb-2 w-full max-w-md mx-auto">
@@ -238,8 +346,18 @@
   <!-- Results section -->
   <div id="results-section" class="hidden space-y-8">
 
+    <!-- Simulation banner -->
+    <div id="sim-banner" class="hidden glass rounded-xl px-4 py-3 flex items-center gap-3 fade-up">
+      <span class="sim-badge">✦ Simulation</span>
+      <p class="text-xs text-[#9a98bd]">
+        <span id="sim-scenario" class="text-[#cfc8ee] font-medium"></span>
+        — synthetic activation rendered through the real nilearn cortical surface pipeline.
+        Install TRIBEv2 for live analysis of your own media.
+      </p>
+    </div>
+
     <!-- Emotion summary -->
-    <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-6 glow-border">
+    <div class="glass rounded-2xl p-6 fade-up">
       <h2 class="text-lg font-semibold mb-1">Emotional Response</h2>
       <p class="text-xs text-[#6060a0] mb-5">How this content makes people feel — derived from brain activation patterns</p>
       <div class="flex gap-6 items-start flex-wrap md:flex-nowrap">
@@ -258,17 +376,15 @@
     </div>
 
     <!-- Top: animated brain player + waveform timeline -->
-    <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-6 glow-border">
+    <div class="glass rounded-2xl p-6 fade-up">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-semibold">Brain Activity</h2>
         <div class="flex items-center gap-3">
           <span id="timestep-label" class="text-xs text-[#6060a0]">t=0s</span>
-          <button id="play-btn" onclick="togglePlay()"
-            class="bg-[var(--fire)] text-white text-xs font-semibold rounded-lg px-3 py-1.5 hover:opacity-80 transition-opacity">
+          <button id="play-btn" onclick="togglePlay()" class="btn-primary text-xs px-3.5 py-1.5">
             ▶ Play
           </button>
-          <button onclick="resetPlayer()"
-            class="bg-[#1a1a35] text-[#a0a0c0] text-xs font-semibold rounded-lg px-3 py-1.5 hover:bg-[#252550] transition-colors">
+          <button onclick="resetPlayer()" class="btn-ghost text-xs px-3 py-1.5">
             ↺ Reset
           </button>
         </div>
@@ -334,9 +450,8 @@
 
     <!-- New analysis button -->
     <div class="text-center pt-2">
-      <button onclick="resetAll()"
-        class="bg-[#1a1a35] border border-[var(--border)] text-[#a0a0c0] font-semibold px-6 py-2.5 rounded-xl hover:border-[var(--glow)] hover:text-white transition-all">
-        ← Analyze Another File
+      <button onclick="resetAll()" class="btn-ghost px-6 py-2.5">
+        ← Analyze something else
       </button>
     </div>
   </div>
@@ -437,14 +552,57 @@ async function handleFile(file){
     return;
   }
 
-  // Stream progress
   fileInput.value = '';  // Reset so same file can be re-uploaded
+  streamJob(jobId);
+}
+
+// ── Demo / simulation mode ───────────────────────────────────────────────────
+async function loadSamples(){
+  const grid = document.getElementById('sample-grid');
+  if(!grid) return;
+  try {
+    const samples = await (await fetch('/api/samples')).json();
+    grid.innerHTML = '';
+    samples.forEach((s, i) => {
+      const card = document.createElement('button');
+      card.className = 'sample-card text-left fade-up';
+      card.style.setProperty('--accent', s.accent || '#7b5ea7');
+      card.style.animationDelay = (0.05 * i) + 's';
+      card.onclick = () => runDemo(s.id, s.title);
+      card.innerHTML = `
+        <div class="relative z-10">
+          <div class="sc-icon mb-3">${s.icon || '🧠'}</div>
+          <p class="font-semibold text-sm leading-tight">${s.title}</p>
+          <p class="text-[11px] text-[#8585b0] mt-0.5">${s.subtitle || ''}</p>
+          <p class="text-[10px] mt-3 font-semibold" style="color:${s.accent}">Run demo →</p>
+        </div>`;
+      grid.appendChild(card);
+    });
+  } catch(e) { grid.innerHTML = '<p class="text-xs text-[#6060a0] col-span-full text-center">Samples unavailable.</p>'; }
+}
+
+async function runDemo(scenarioId, title){
+  document.getElementById('upload-section').classList.add('hidden');
+  document.getElementById('processing-section').classList.remove('hidden');
+  document.getElementById('processing-file').textContent = `✦ ${title}`;
+  document.getElementById('processing-sim').classList.remove('hidden');
+  try {
+    const res = await fetch(`/api/demo?scenario_id=${encodeURIComponent(scenarioId)}`, {method:'POST'});
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.detail || 'Could not start demo');
+    streamJob(data.job_id);
+  } catch(e) { showError(e.message); }
+}
+
+// ── Shared progress stream (real + demo jobs) ────────────────────────────────
+function streamJob(jobId){
   const es = new EventSource(`/api/job/${jobId}/stream`);
   es.onmessage = async (e) => {
     const job = JSON.parse(e.data);
     document.getElementById('processing-message').textContent = job.message || '…';
     document.getElementById('progress-bar').style.width = (job.progress||0)+'%';
     document.getElementById('progress-pct').textContent = (job.progress||0)+'%';
+    if(job.simulated) document.getElementById('processing-sim').classList.remove('hidden');
 
     if(job.status === 'done'){
       es.close();
@@ -464,6 +622,15 @@ async function loadResults(jobId){
   frames = data.frames || [];
   words = data.words || [];
   allRegions = data.top_regions || [];
+
+  // Simulation banner
+  const banner = document.getElementById('sim-banner');
+  if(data.simulated){
+    document.getElementById('sim-scenario').textContent = data.scenario || 'Simulated stimulus';
+    banner.classList.remove('hidden');
+  } else {
+    banner.classList.add('hidden');
+  }
 
   // Waveform
   if(data.waveform){
@@ -658,15 +825,20 @@ function resetPlayer(){ stopPlay(); setFrame(0); }
 function showError(msg){
   document.getElementById('processing-section').classList.add('hidden');
   document.getElementById('results-section').classList.add('hidden');
+  document.getElementById('processing-sim').classList.add('hidden');
   document.getElementById('upload-section').classList.remove('hidden');
   fileInput.value = '';
   alert('Error: ' + msg);
 }
 
+// Populate the demo gallery on load
+loadSamples();
+
 function resetAll(){
   stopPlay();
   frames = []; words = []; currentFrame = 0;
   document.getElementById('results-section').classList.add('hidden');
+  document.getElementById('processing-sim').classList.add('hidden');
   document.getElementById('upload-section').classList.remove('hidden');
   fileInput.value = '';
 }

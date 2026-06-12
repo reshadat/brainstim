@@ -18,6 +18,32 @@ Built on [META TRIBEv2](https://github.com/facebookresearch/thalamus), the state
 
 ---
 
+## Try it instantly (no model required)
+
+BrainStim ships with a **simulation mode** so you can explore the full interface
+without installing the multi-gigabyte TRIBEv2 stack:
+
+```bash
+git clone https://github.com/reshadat/brainstim
+cd brainstim
+./start.sh
+```
+
+Open `http://localhost:8000` and pick one of the sample stimuli ("Ocean
+Documentary", "Live Jazz Set", "Spoken Poem", "Thriller Trailer", "Stand-up
+Comedy"). Each runs a complete analysis with **real nilearn cortical-surface
+renders** driven by synthesized activation, plus region and emotion breakdowns
+drawn from the same HCP-MMP1 atlas data the live pipeline uses.
+
+If you upload your own media while TRIBEv2 isn't installed, BrainStim
+automatically falls back to simulation so the experience still works
+end-to-end. A badge marks any result that came from simulation.
+
+The only extra dependency simulation needs is `nilearn` (already in
+`requirements.txt`); it downloads the ~10 MB `fsaverage5` mesh once on first run.
+
+---
+
 ## Setup
 
 ### Prerequisites
@@ -61,10 +87,15 @@ Open `http://localhost:8000`. API docs at `http://localhost:8000/docs`.
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/api/infer` | Upload file → returns `job_id` |
+| GET | `/api/samples` | List sample stimuli for simulation mode |
+| POST | `/api/demo?scenario_id=…` | Run a simulated analysis on a sample → returns `job_id` |
 | GET | `/api/job/{id}` | Poll job status and progress |
 | GET | `/api/job/{id}/stream` | SSE stream of live progress |
 | GET | `/api/job/{id}/results` | Full results: frames, ROIs, waveform |
 | GET | `/api/brain_feelings` | Brain region → feelings mapping |
+
+Simulated results carry `"simulated": true` and a `"scenario"` label in the
+results payload.
 
 Results payload:
 
@@ -100,7 +131,8 @@ brainstim/
 ├── api/
 │   ├── main.py        # FastAPI app and routes
 │   ├── inference.py   # TRIBEv2 pipeline + job store
-│   ├── rendering.py   # Brain frame (PyVista) + waveform (matplotlib)
+│   ├── rendering.py   # Brain frame (nilearn) + waveform (matplotlib)
+│   ├── demo.py        # Simulation mode: synthetic activation + sample stimuli
 │   └── data.py        # HCP-MMP1 region → feelings + stimulation tips
 ├── web/
 │   └── index.html     # Single-file frontend (Tailwind + vanilla JS)

@@ -91,6 +91,31 @@ def render_waveform(audio_path: str) -> str:
     except Exception:
         data = np.random.randn(1000) * 0.3
 
+    return _render_waveform_signal(np.asarray(data, dtype=float))
+
+
+def render_synthetic_waveform(seed: int = 0, n: int = 1600) -> str:
+    """
+    Render a plausible speech/music-like waveform for simulation mode —
+    no audio file required. Returns a base64-encoded PNG string.
+    """
+    rng = np.random.default_rng(seed)
+    x = np.linspace(0, 1, n)
+    # Layered carriers + a slow amplitude envelope + bursty syllable gating.
+    carrier = (
+        np.sin(2 * np.pi * 9 * x) * 0.6
+        + np.sin(2 * np.pi * 23 * x + 0.7) * 0.3
+        + np.sin(2 * np.pi * 51 * x + 1.3) * 0.15
+    )
+    envelope = 0.35 + 0.65 * np.abs(np.sin(2 * np.pi * 2.3 * x + rng.uniform(0, 3)))
+    syllables = (np.sin(2 * np.pi * 6 * x + rng.uniform(0, 3)) > -0.3).astype(float)
+    noise = rng.standard_normal(n) * 0.05
+    data = (carrier * envelope * syllables + noise) * 0.9
+    return _render_waveform_signal(data)
+
+
+def _render_waveform_signal(data: np.ndarray) -> str:
+    """Shared waveform drawing for real and synthetic signals."""
     fig, ax = plt.subplots(figsize=(16, 1.2))
     fig.patch.set_facecolor("#0a0a1a")
     ax.set_facecolor("#0a0a1a")
