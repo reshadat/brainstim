@@ -2,7 +2,7 @@
 
 Upload a video, audio clip, or piece of text and see which parts of your brain it activates — predicted fMRI activity mapped to real psychological experiences.
 
-Built on [META TRIBEv2](https://github.com/facebookresearch/thalamus), the state-of-the-art brain encoding model from Meta AI Research.
+Built on [META TRIBEv2](https://github.com/facebookresearch/tribev2), the state-of-the-art brain encoding model from Meta AI Research.
 
 **Not a medical tool.** Exploration and creative use only.
 
@@ -26,7 +26,13 @@ without installing the multi-gigabyte TRIBEv2 stack:
 ```bash
 git clone https://github.com/reshadat/brainstim
 cd brainstim
-./start.sh
+
+# Install the deps (see note below — start.sh alone is not enough)
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt fastapi "uvicorn[standard]" python-multipart soundfile
+
+# Launch
+python -m uvicorn main:app --app-dir api --port 8000
 ```
 
 Open `http://localhost:8000` and pick one of the sample stimuli ("Ocean
@@ -39,24 +45,35 @@ If you upload your own media while TRIBEv2 isn't installed, BrainStim
 automatically falls back to simulation so the experience still works
 end-to-end. A badge marks any result that came from simulation.
 
-The only extra dependency simulation needs is `nilearn` (already in
-`requirements.txt`); it downloads the ~10 MB `fsaverage5` mesh once on first run.
+> **Note:** `start.sh` only installs the web-server packages
+> (`fastapi`, `uvicorn`, `python-multipart`, `soundfile`). It does **not**
+> install `requirements.txt`, so simulation mode needs `nilearn`, `matplotlib`,
+> and `numpy` installed separately — hence the explicit `pip install -r
+> requirements.txt` above. The `fsaverage5` mesh (~10 MB) downloads once on
+> first run.
 
 ---
 
-## Setup
+## Setup (full TRIBEv2 pipeline)
+
+The live pipeline runs real fMRI prediction. It needs a capable machine
+(ideally a CUDA GPU) and several GB of model downloads. On a laptop, prefer
+simulation mode above.
 
 ### Prerequisites
 
 - Python 3.10+
-- [TRIBEv2](https://github.com/facebookresearch/thalamus) installed (see below)
+- [TRIBEv2](https://github.com/facebookresearch/tribev2) installed (see below)
 - ffmpeg (for video/audio processing)
+- A Hugging Face account with **approved access to `meta-llama/Llama-3.2-3B`**
+  (the model is gated; request access on its model page and run
+  `huggingface-cli login`)
 
 ### Install TRIBEv2
 
 ```bash
-git clone https://github.com/facebookresearch/thalamus
-cd thalamus
+git clone https://github.com/facebookresearch/tribev2
+cd tribev2
 pip install -e ".[plotting]"
 ```
 
@@ -68,10 +85,10 @@ First run downloads ~500 MB (tribev2-mini) plus supporting models (LLaMA 3.2, V-
 git clone https://github.com/reshadat/brainstim
 cd brainstim
 
-# If tribev2 is in a separate venv:
-VENV=../thalamus/path/to/venv ./start.sh
+# If tribev2 is in a separate venv, point VENV at it:
+VENV=/path/to/tribev2/.venv ./start.sh
 
-# Or if tribev2 is in your system Python:
+# Or if tribev2 is in your system / active Python:
 ./start.sh
 
 # Custom port:
@@ -79,6 +96,10 @@ VENV=../thalamus/path/to/venv ./start.sh
 ```
 
 Open `http://localhost:8000`. API docs at `http://localhost:8000/docs`.
+
+> **Note:** `start.sh` defaults `VENV` to `../tribev2/path/to/venv`, which is a
+> placeholder. Set `VENV` to your real tribev2 virtualenv (e.g.
+> `/path/to/tribev2/.venv`) or activate that environment before running.
 
 ---
 
