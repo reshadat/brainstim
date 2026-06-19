@@ -56,49 +56,75 @@ end-to-end. A badge marks any result that came from simulation.
 
 ## Setup (full TRIBEv2 pipeline)
 
-The live pipeline runs real fMRI prediction. It needs a capable machine
-(ideally a CUDA GPU) and several GB of model downloads. On a laptop, prefer
-simulation mode above.
+The live pipeline runs real fMRI prediction with
+[Meta's TRIBEv2](https://github.com/facebookresearch/tribev2). It needs a
+capable machine (ideally a CUDA GPU) and several GB of model downloads. On a
+laptop — especially Apple Silicon without CUDA — expect slow inference and
+prefer simulation mode above.
 
 ### Prerequisites
 
-- Python 3.10+
-- [TRIBEv2](https://github.com/facebookresearch/tribev2) installed (see below)
+- **Python 3.11+** (TRIBEv2 requires 3.11+; the simulation venv's 3.9 is *not*
+  enough for the full pipeline)
 - ffmpeg (for video/audio processing)
-- A Hugging Face account with **approved access to `meta-llama/Llama-3.2-3B`**
-  (the model is gated; request access on its model page and run
-  `huggingface-cli login`)
+- [TRIBEv2](https://github.com/facebookresearch/tribev2) installed (see below)
+- A Hugging Face account with **approved access to
+  [`meta-llama/Llama-3.2-3B`](https://huggingface.co/meta-llama/Llama-3.2-3B)**.
+  The model is gated: request access on its model page (approval is typically
+  minutes to hours), create a read token, then `huggingface-cli login`.
+  TRIBEv2 loads Llama 3.2 internally, so inference fails without this even after
+  everything else installs.
 
-### Install TRIBEv2
+> TRIBEv2 weights ([`facebook/tribev2`](https://huggingface.co/facebook/tribev2))
+> are released under **CC BY-NC 4.0 — non-commercial use only**.
+
+### 1. System dependencies (macOS / Homebrew)
+
+```bash
+brew install python@3.12 ffmpeg
+```
+
+### 2. Install TRIBEv2
 
 ```bash
 git clone https://github.com/facebookresearch/tribev2
 cd tribev2
+python3.12 -m venv .venv && source .venv/bin/activate
 pip install -e ".[plotting]"
 ```
 
-First run downloads ~500 MB (tribev2-mini) plus supporting models (LLaMA 3.2, V-JEPA2, Wav2Vec-BERT) — several GB total. Subsequent runs use the cache.
+This pulls PyTorch and the multimodal encoders — several GB. The first
+inference also downloads the `facebook/tribev2` weights plus supporting models
+(Llama 3.2, V-JEPA2, Wav2Vec-BERT); subsequent runs use the cache.
 
-### Run BrainStim
+### 3. Authenticate with Hugging Face
+
+```bash
+huggingface-cli login   # paste a token from an account approved for Llama-3.2-3B
+```
+
+### 4. Run BrainStim against the live pipeline
 
 ```bash
 git clone https://github.com/reshadat/brainstim
 cd brainstim
 
-# If tribev2 is in a separate venv, point VENV at it:
+# Point VENV at the tribev2 environment created in step 2:
 VENV=/path/to/tribev2/.venv ./start.sh
 
-# Or if tribev2 is in your system / active Python:
+# Or activate that venv first, then:
 ./start.sh
 
 # Custom port:
 ./start.sh 9000
 ```
 
-Open `http://localhost:8000`. API docs at `http://localhost:8000/docs`.
+Open `http://localhost:8000`. API docs at `http://localhost:8000/docs`. With
+TRIBEv2 importable and Llama access granted, uploads run real inference and
+results no longer carry the `"simulated": true` badge.
 
-> **Note:** `start.sh` defaults `VENV` to `../tribev2/path/to/venv`, which is a
-> placeholder. Set `VENV` to your real tribev2 virtualenv (e.g.
+> **Note:** `start.sh` falls back to system/active Python when `VENV` is unset.
+> Either set `VENV` to your real tribev2 virtualenv (e.g.
 > `/path/to/tribev2/.venv`) or activate that environment before running.
 
 ---
