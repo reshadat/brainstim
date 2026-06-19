@@ -4,390 +4,443 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>BrainStim — Neural Response Analyzer</title>
-<script src="https://cdn.tailwindcss.com"></script>
+<!-- Tailwind is vendored locally so the UI renders even offline / when the CDN is blocked -->
+<script src="/tailwind.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --fire: #ff6b35;
-    --fire-dim: #ff6b3560;
-    --glow: #7b5ea7;
-    --glow-bright: #b794f4;
-    --bg: #080813;
-    --card: #0e0e1f;
-    --border: #1e1e3a;
+    --bg:      #0a0b0d;
+    --panel:   #101216;
+    --panel-2: #0d0f12;
+    --ink:     #e8e8e6;
+    --muted:   #8b8d93;
+    --faint:   #5a5c63;
+    --line:    #22242b;
+    --line-2:  #2c2f37;
+    --signal:  #ff5e1a;   /* matches the hot colormap of the brain renders */
   }
 
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
 
   body {
     background: var(--bg);
-    color: #e2e0f0;
-    font-family: 'Inter', system-ui, sans-serif;
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
     min-height: 100vh;
     overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    font-size: 14px;
   }
 
-  /* ── Neural particle canvas ── */
-  #neural-bg {
-    position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.35;
-  }
-
+  .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
   .layer { position: relative; z-index: 1; }
 
-  /* ── Glow effects ── */
-  .glow-text { text-shadow: 0 0 30px var(--glow-bright), 0 0 60px var(--glow); }
-  .glow-border { box-shadow: 0 0 0 1px var(--border), 0 0 20px #7b5ea720; }
-  .fire-glow { box-shadow: 0 0 20px #ff6b3540, 0 0 40px #ff6b3520; }
+  /* Background graticule + signal sweep */
+  #neural-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
 
-  /* ── Upload zone ── */
-  #drop-zone {
-    border: 2px dashed var(--border);
-    transition: all 0.3s ease;
-    background: linear-gradient(135deg, #0e0e1f 0%, #12112a 100%);
-  }
-  #drop-zone.drag-over {
-    border-color: var(--glow-bright);
-    box-shadow: 0 0 40px #7b5ea740, inset 0 0 40px #7b5ea710;
-  }
+  /* ── Instrument primitives ──────────────────────────────────────────────── */
+  .panel { background: var(--panel); border: 1px solid var(--line); }
+  .rule  { border-color: var(--line); }
 
-  /* ── Progress bar ── */
-  #progress-bar {
-    height: 3px;
-    background: linear-gradient(90deg, var(--glow), var(--fire), var(--glow-bright));
-    background-size: 200% 100%;
-    animation: shimmer 2s linear infinite;
-    border-radius: 99px;
-    transition: width 0.5s ease;
+  .kicker {
+    font-family: 'IBM Plex Mono', monospace; font-size: 10.5px;
+    letter-spacing: .18em; text-transform: uppercase; color: var(--faint);
   }
-  @keyframes shimmer { 0%{background-position:0% 50%} 100%{background-position:200% 50%} }
-
-  /* ── Brain player ── */
-  #brain-frame {
-    image-rendering: pixelated;
-    transition: opacity 0.15s ease;
+  .panel-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding: 12px 16px; border-bottom: 1px solid var(--line);
   }
-  #brain-frame.flash { opacity: 0.4; }
-
-  /* ── Timeline strip ── */
-  .brain-thumb {
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s;
-    flex-shrink: 0;
-  }
-  .brain-thumb:hover { border-color: var(--fire); transform: scale(1.05); }
-  .brain-thumb.active {
-    border-color: var(--fire);
-    box-shadow: 0 0 12px var(--fire-dim);
-    transform: scale(1.08);
+  .panel-head h2 {
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 600;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--ink);
   }
 
-  /* ── ROI cards ── */
-  .roi-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    transition: all 0.25s;
-  }
-  .roi-card:hover {
-    border-color: var(--glow);
-    box-shadow: 0 0 20px #7b5ea730;
-    transform: translateY(-2px);
-  }
-
-  .cat-visual   { color: #60a5fa; border-left: 3px solid #60a5fa; }
-  .cat-auditory { color: #34d399; border-left: 3px solid #34d399; }
-  .cat-language { color: #a78bfa; border-left: 3px solid #a78bfa; }
-  .cat-social   { color: #f472b6; border-left: 3px solid #f472b6; }
-  .cat-emotion  { color: #fb923c; border-left: 3px solid #fb923c; }
-  .cat-memory   { color: #facc15; border-left: 3px solid #facc15; }
-  .cat-motor    { color: #4ade80; border-left: 3px solid #4ade80; }
-  .cat-executive{ color: #22d3ee; border-left: 3px solid #22d3ee; }
-  .cat-attention{ color: #e879f9; border-left: 3px solid #e879f9; }
-  .cat-other    { color: #94a3b8; border-left: 3px solid #94a3b8; }
-
-  /* ── Activation bar ── */
-  .act-bar {
-    height: 4px; border-radius: 99px;
-    background: linear-gradient(90deg, var(--fire), #ffd700);
-  }
-
-  /* ── Pulse animation ── */
-  @keyframes pulse-ring {
-    0%   { box-shadow: 0 0 0 0 #7b5ea750; }
-    70%  { box-shadow: 0 0 0 14px #7b5ea700; }
-    100% { box-shadow: 0 0 0 0 #7b5ea700; }
-  }
-  .pulse-ring { animation: pulse-ring 2s ease-out infinite; }
-
-  /* ── Scan lines on brain ── */
-  .scan-overlay {
-    background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(123,94,167,0.05) 3px, rgba(123,94,167,0.05) 4px);
-    pointer-events: none;
-  }
-
-  /* ── Playback cursor ── */
-  #timeline-cursor {
-    position: absolute; top: 0; bottom: 0; width: 2px;
-    background: var(--fire);
-    box-shadow: 0 0 8px var(--fire);
-    transition: left 0.2s linear;
-    pointer-events: none;
-  }
-
-  /* ── Word tokens ── */
-  .word-token {
-    display: inline-block;
-    background: #1a1a35;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 1px 6px;
-    font-size: 11px;
-    color: #a0a0c0;
-    transition: all 0.2s;
-    cursor: default;
+  .tag {
+    font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500;
+    letter-spacing: .1em; text-transform: uppercase;
+    padding: 2px 6px; border: 1px solid var(--line-2); color: var(--muted);
     white-space: nowrap;
   }
-  .word-token.active {
-    background: #ff6b3530;
-    border-color: var(--fire);
-    color: #ff9a6c;
+
+  .btn {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 500;
+    letter-spacing: .1em; text-transform: uppercase;
+    padding: 7px 13px; border: 1px solid var(--line-2); color: var(--ink);
+    background: transparent; cursor: pointer; transition: border-color .15s, color .15s, background .15s;
+  }
+  .btn:hover { border-color: var(--muted); }
+  .btn-signal { border-color: var(--signal); color: var(--signal); }
+  .btn-signal:hover { background: var(--signal); color: #120a05; }
+
+  /* ── Header bar ──────────────────────────────────────────────────────────── */
+  .topbar { border-bottom: 1px solid var(--line); }
+  .sig-dot { width: 9px; height: 9px; background: var(--signal); display: inline-block; }
+  .kv b { color: var(--ink); font-weight: 500; }
+  .kv  { color: var(--faint); }
+
+  /* ── Drop zone ─────────────────────────────────────────────────────────────*/
+  #drop-zone {
+    border: 1px solid var(--line-2); background: var(--panel-2);
+    transition: border-color .2s, background .2s; cursor: pointer;
+    position: relative;
+  }
+  #drop-zone:hover { border-color: var(--muted); }
+  #drop-zone.drag-over { border-color: var(--signal); background: #140d08; }
+  /* corner ticks */
+  #drop-zone::before, #drop-zone::after {
+    content:''; position:absolute; width:10px; height:10px; border:1px solid var(--signal);
+    opacity:.0; transition:opacity .2s;
+  }
+  #drop-zone::before { top:-1px; left:-1px; border-right:none; border-bottom:none; }
+  #drop-zone::after  { bottom:-1px; right:-1px; border-left:none; border-top:none; }
+  #drop-zone:hover::before, #drop-zone:hover::after { opacity:1; }
+
+  /* ── Stimulus manifest (sample list) ───────────────────────────────────────*/
+  .stim-row {
+    display: grid; grid-template-columns: 34px minmax(0,1.1fr) minmax(0,1.4fr) 72px 64px;
+    align-items: center; gap: 14px; width: 100%; text-align: left;
+    padding: 13px 16px; border-bottom: 1px solid var(--line);
+    background: transparent; cursor: pointer; position: relative;
+    transition: background .14s;
+  }
+  .stim-row:last-child { border-bottom: none; }
+  .stim-row::before {
+    content:''; position:absolute; left:0; top:0; bottom:0; width:2px;
+    background: var(--accent, var(--signal)); transform: scaleY(0); transform-origin: center;
+    transition: transform .16s;
+  }
+  .stim-row:hover { background: rgba(255,255,255,.025); }
+  .stim-row:hover::before { transform: scaleY(1); }
+  .stim-row:hover .stim-go { color: var(--accent, var(--signal)); }
+  .stim-idx   { color: var(--faint); font-size: 12px; }
+  .stim-title { color: var(--ink); font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stim-sub   { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stim-type  { font-size: 10px; letter-spacing: .12em; }
+  .stim-go    { color: var(--faint); font-size: 11px; letter-spacing: .1em; text-align: right; transition: color .14s; }
+
+  /* ── Progress ──────────────────────────────────────────────────────────────*/
+  #progress-track { height: 2px; background: var(--line); width: 100%; }
+  #progress-bar { height: 2px; background: var(--signal); width: 0%; transition: width .5s ease; }
+  @keyframes blink { 50% { opacity: .25; } }
+  .cursor-blink::after { content:'▋'; margin-left: 4px; color: var(--signal); animation: blink 1s step-end infinite; }
+
+  /* ── Brain viewport ──────────────────────────────────────────────────────── */
+  .viewport { border: 1px solid var(--line-2); background: #060708; position: relative; }
+  #brain-frame { image-rendering: pixelated; transition: opacity .15s ease; display: block; }
+  #brain-frame.flash { opacity: .35; }
+  .scan-overlay {
+    background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255,255,255,.035) 3px, rgba(255,255,255,.035) 4px);
+    pointer-events: none;
+  }
+  .readout { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted); }
+  .readout b { color: var(--signal); font-weight: 500; }
+
+  /* thumbnails / contact sheet */
+  .brain-thumb { border: 1px solid var(--line); cursor: pointer; transition: border-color .15s; flex-shrink: 0; display:block; }
+  .brain-thumb:hover { border-color: var(--muted); }
+  .brain-thumb.active { border-color: var(--signal); }
+  #timeline-cursor { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--signal); transition: left .2s linear; pointer-events: none; }
+
+  /* word tokens */
+  .word-token {
+    display: inline-block; font-family: 'IBM Plex Mono', monospace;
+    border: 1px solid var(--line); padding: 1px 6px; font-size: 11px; color: var(--muted);
+    transition: all .15s; white-space: nowrap;
+  }
+  .word-token.active { border-color: var(--signal); color: var(--signal); background: #160d07; }
+
+  /* ── Emotion meters ──────────────────────────────────────────────────────── */
+  .emo-row { display: grid; grid-template-columns: 11px 1fr; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .emo-row:last-child { border-bottom: none; }
+  .emo-swatch { width: 11px; height: 11px; }
+  .emo-meter { height: 3px; background: var(--line); width: 100%; }
+  .emo-fill  { height: 3px; transition: width .7s ease; }
+
+  /* ── Region ledger ──────────────────────────────────────────────────────── */
+  .ledger-head, .roi-row {
+    display: grid;
+    grid-template-columns: 34px minmax(0,2fr) 96px 104px 88px 96px;
+    gap: 14px; align-items: center;
+  }
+  .ledger-head {
+    padding: 9px 16px; border-bottom: 1px solid var(--line-2);
+    font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--faint);
+  }
+  .roi-row {
+    padding: 12px 16px; border-bottom: 1px solid var(--line); position: relative;
+    transition: background .14s;
+  }
+  .roi-row:last-child { border-bottom: none; }
+  .roi-row::before { content:''; position:absolute; left:0; top:0; bottom:0; width:2px; background: var(--cat,#777); }
+  .roi-row:hover { background: rgba(255,255,255,.025); }
+  .roi-rank { font-family:'IBM Plex Mono',monospace; font-size:12px; color: var(--faint); }
+  .roi-name { font-size: 13.5px; color: var(--ink); font-weight: 500; line-height: 1.25; }
+  .roi-exp  { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.3; }
+  .roi-code { font-family:'IBM Plex Mono',monospace; font-size: 11px; color: var(--muted); }
+  .roi-cat  { font-family:'IBM Plex Mono',monospace; font-size: 9.5px; letter-spacing:.1em; text-transform:uppercase; color: var(--cat,#888); border:1px solid var(--cat,#444); padding:1px 5px; }
+  .roi-act  { font-family:'IBM Plex Mono',monospace; font-size: 13px; color: var(--ink); text-align: right; }
+  .roi-meter{ height: 3px; background: var(--line); width: 100%; }
+  .roi-mfill{ height: 3px; background: var(--cat,var(--signal)); }
+  @media (max-width: 820px){
+    .ledger-head { display:none; }
+    .roi-row { grid-template-columns: 28px 1fr 84px; }
+    .roi-row .col-code, .roi-row .col-cat, .roi-row .col-meter { display:none; }
   }
 
-  /* ── Scrollbar ── */
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  /* category accent colors */
+  .ct-visual{--cat:#5aa0ff}.ct-auditory{--cat:#3ddc97}.ct-language{--cat:#b08cff}
+  .ct-social{--cat:#ff7ab0}.ct-emotion{--cat:#ff9b4a}.ct-memory{--cat:#ffd23f}
+  .ct-motor{--cat:#54e06a}.ct-executive{--cat:#34cfe6}.ct-attention{--cat:#e07aff}
+  .ct-sensory{--cat:#7fd6c9}.ct-other{--cat:#9aa0ab}
+
+  /* filter chips */
+  .cat-filter-btn {
+    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.1em; text-transform:uppercase;
+    padding:3px 8px; border:1px solid var(--line-2); color: var(--muted); cursor:pointer; transition: all .14s;
+  }
+  .cat-filter-btn:hover { border-color: var(--muted); color: var(--ink); }
+  .cat-filter-btn.on { border-color: var(--signal); color: var(--signal); }
+
+  /* sim badge */
+  .sim-badge {
+    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.14em; text-transform:uppercase;
+    color: var(--signal); border:1px solid var(--signal); padding:2px 7px;
+  }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-  ::-webkit-scrollbar-thumb:hover { background: var(--glow); }
+  ::-webkit-scrollbar-thumb { background: var(--line-2); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+  .hide-scroll::-webkit-scrollbar { height: 6px; }
 </style>
 </head>
 <body>
 
-<!-- Neural particle background -->
 <canvas id="neural-bg"></canvas>
 
-<div class="layer max-w-6xl mx-auto px-4 py-8">
+<div class="layer">
 
-  <!-- Header -->
-  <div class="text-center mb-12">
-    <div class="inline-flex items-center gap-2 bg-[#1a1a35] border border-[var(--border)] rounded-full px-4 py-1.5 text-xs text-[var(--glow-bright)] mb-4">
-      <span class="w-1.5 h-1.5 rounded-full bg-[var(--glow-bright)] animate-pulse inline-block"></span>
-      Powered by META TRIBEv2 · fsaverage5 · HCP-MMP1 Atlas
-    </div>
-    <h1 class="text-5xl font-bold glow-text mb-3" style="letter-spacing:-1px">
-      Brain<span style="color:var(--fire)">Stim</span>
-    </h1>
-    <p class="text-[#8080a0] text-base max-w-lg mx-auto">
-      Upload video, audio, or text. See which parts of the brain activate — and why.
-    </p>
-  </div>
-
-  <!-- Upload section -->
-  <div id="upload-section">
-    <div id="drop-zone" class="rounded-2xl p-12 text-center cursor-pointer glow-border"
-         onclick="document.getElementById('file-input').click()">
-      <div class="mb-4">
-        <svg class="mx-auto w-14 h-14 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-            d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-        </svg>
-      </div>
-      <p class="text-lg font-semibold mb-1">Drop file here or click to upload</p>
-      <p class="text-sm text-[#6060a0]">Video (.mp4 .mov .avi) · Audio (.mp3 .wav) · Text (.txt)</p>
-      <p class="text-xs text-[#404060] mt-3">Images are not supported — use video or audio</p>
-    </div>
-    <input type="file" id="file-input" class="hidden"
-           accept=".mp4,.avi,.mkv,.mov,.webm,.wav,.mp3,.flac,.ogg,.txt"/>
-
-    <!-- API quick ref -->
-    <div class="mt-6 bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 text-xs text-[#6060a0] font-mono">
-      <span class="text-[var(--glow-bright)]">POST</span> /api/infer  ·
-      <span class="text-[var(--glow-bright)]">GET</span> /api/job/{id}/stream  ·
-      <span class="text-[var(--glow-bright)]">GET</span> /api/job/{id}/results  ·
-      <a href="/docs" target="_blank" class="text-[var(--fire)] hover:underline ml-2">→ Swagger docs</a>
-    </div>
-  </div>
-
-  <!-- Processing section -->
-  <div id="processing-section" class="hidden">
-    <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-8 text-center glow-border">
-      <!-- Animated brain icon -->
-      <div class="relative inline-block mb-6">
-        <div class="w-24 h-24 rounded-full border border-[var(--glow)] pulse-ring flex items-center justify-center">
-          <svg class="w-12 h-12 opacity-60" viewBox="0 0 100 100" fill="none">
-            <ellipse cx="50" cy="50" rx="35" ry="28" stroke="#b794f4" stroke-width="2"/>
-            <path d="M50 22 Q70 30 72 50 Q70 70 50 78 Q30 70 28 50 Q30 30 50 22" stroke="#7b5ea7" stroke-width="1.5" fill="none"/>
-            <path d="M50 22 Q55 40 50 50 Q45 60 50 78" stroke="#7b5ea7" stroke-width="1" fill="none"/>
-            <circle cx="38" cy="40" r="2" fill="#ff6b35" class="animate-pulse"/>
-            <circle cx="62" cy="44" r="2" fill="#ff6b35" class="animate-pulse" style="animation-delay:0.3s"/>
-            <circle cx="45" cy="60" r="2" fill="#ff6b35" class="animate-pulse" style="animation-delay:0.6s"/>
-          </svg>
+  <!-- Top instrument bar -->
+  <header class="topbar">
+    <div class="max-w-[1120px] mx-auto px-5 py-4 flex items-center justify-between flex-wrap gap-y-3">
+      <div class="flex items-center gap-3">
+        <span class="sig-dot"></span>
+        <div>
+          <div class="mono" style="font-size:17px;font-weight:600;letter-spacing:.04em">BRAINSTIM</div>
+          <div class="kicker" style="margin-top:1px">Neural Response Analyzer</div>
         </div>
       </div>
-
-      <p id="processing-file" class="text-sm text-[#6060a0] mb-2"></p>
-      <p id="processing-message" class="text-base font-medium mb-4">Initializing…</p>
-
-      <div class="bg-[#0a0a1a] rounded-full overflow-hidden mb-2 w-full max-w-md mx-auto">
-        <div id="progress-bar" style="width:0%"></div>
+      <div class="mono flex flex-wrap items-center gap-x-5 gap-y-1" style="font-size:11px">
+        <span class="kv">MODEL <b>tribev2</b></span>
+        <span class="kv">ATLAS <b>HCP-MMP1</b></span>
+        <span class="kv">MESH <b>fsaverage5</b></span>
+        <span class="kv">VERTICES <b>20,484</b></span>
+        <a href="/docs" target="_blank" class="kv hover:text-[var(--signal)]" style="border-bottom:1px solid var(--line-2)">API ↗</a>
       </div>
-      <p id="progress-pct" class="text-xs text-[#6060a0]">0%</p>
     </div>
-  </div>
+  </header>
 
-  <!-- Results section -->
-  <div id="results-section" class="hidden space-y-8">
+  <main class="max-w-[1120px] mx-auto px-5 py-8">
 
-    <!-- Emotion summary -->
-    <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-6 glow-border">
-      <h2 class="text-lg font-semibold mb-1">Emotional Response</h2>
-      <p class="text-xs text-[#6060a0] mb-5">How this content makes people feel — derived from brain activation patterns</p>
-      <div class="flex gap-6 items-start flex-wrap md:flex-nowrap">
-        <!-- Donut chart -->
-        <div class="flex-shrink-0 relative" style="width:200px;height:200px">
-          <canvas id="emotion-donut" width="200" height="200"></canvas>
-          <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <span id="donut-top-emoji" class="text-2xl">-</span>
-            <span id="donut-top-label" class="text-sm font-semibold mt-1">-</span>
-            <span id="donut-top-pct" class="text-xs text-[#6060a0]">-</span>
+    <!-- Upload section -->
+    <div id="upload-section">
+
+      <div class="mb-6 max-w-2xl">
+        <p class="kicker mb-2">Input</p>
+        <h1 style="font-size:26px;font-weight:600;line-height:1.25;letter-spacing:-.01em">
+          Map a stimulus onto the cortex.
+        </h1>
+        <p class="text-[var(--muted)] mt-2 leading-relaxed">
+          Submit video, audio, or text. TRIBEv2 predicts fMRI activation across 20,484 vertices,
+          resolves them to named cortical regions, and reports the psychological experience each implies.
+        </p>
+      </div>
+
+      <div id="drop-zone" class="p-9 mb-3" onclick="document.getElementById('file-input').click()">
+        <div class="flex items-center gap-5">
+          <div class="mono text-[var(--signal)]" style="font-size:30px;line-height:1">[ + ]</div>
+          <div>
+            <p class="mono" style="font-size:13px;letter-spacing:.06em">DROP FILE — OR CLICK TO SELECT</p>
+            <p class="mono text-[var(--faint)] mt-1.5" style="font-size:11px;letter-spacing:.04em">
+              VIDEO .mp4 .mov .avi .mkv .webm &nbsp;·&nbsp; AUDIO .wav .mp3 .flac .ogg &nbsp;·&nbsp; TEXT .txt
+            </p>
           </div>
         </div>
-        <!-- Emotion bars -->
-        <div class="flex-1 min-w-0 space-y-2" id="emotion-bars"></div>
+      </div>
+      <p class="mono text-[var(--faint)] mb-10" style="font-size:10.5px;letter-spacing:.05em">
+        NOTE — images unsupported; TRIBEv2 processes temporal media only.
+      </p>
+
+      <input type="file" id="file-input" class="hidden"
+             accept=".mp4,.avi,.mkv,.mov,.webm,.wav,.mp3,.flac,.ogg,.txt"/>
+
+      <!-- Stimulus manifest (simulation samples) -->
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Sample Stimuli</h2>
+          <span class="kicker">Simulation · no model required</span>
+        </div>
+        <div id="sample-grid"></div>
+      </div>
+      <p class="mono text-[var(--faint)] mt-3" style="font-size:10.5px;letter-spacing:.04em">
+        Samples synthesize activation and render it through the real nilearn cortical-surface pipeline.
+      </p>
+    </div>
+
+    <!-- Processing section -->
+    <div id="processing-section" class="hidden">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Running Analysis</h2>
+          <span id="processing-sim" class="hidden"><span class="sim-badge">SIM</span></span>
+        </div>
+        <div class="p-6">
+          <p id="processing-file" class="mono text-[var(--muted)] mb-4" style="font-size:12px"></p>
+          <p id="processing-message" class="mono cursor-blink mb-4" style="font-size:13px;color:var(--ink)">Initializing</p>
+          <div id="progress-track"><div id="progress-bar"></div></div>
+          <div class="flex justify-between mt-2 mono text-[var(--faint)]" style="font-size:11px">
+            <span>PROGRESS</span><span id="progress-pct">0%</span>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Top: animated brain player + waveform timeline -->
-    <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-6 glow-border">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-semibold">Brain Activity</h2>
-        <div class="flex items-center gap-3">
-          <span id="timestep-label" class="text-xs text-[#6060a0]">t=0s</span>
-          <button id="play-btn" onclick="togglePlay()"
-            class="bg-[var(--fire)] text-white text-xs font-semibold rounded-lg px-3 py-1.5 hover:opacity-80 transition-opacity">
-            ▶ Play
-          </button>
-          <button onclick="resetPlayer()"
-            class="bg-[#1a1a35] text-[#a0a0c0] text-xs font-semibold rounded-lg px-3 py-1.5 hover:bg-[#252550] transition-colors">
-            ↺ Reset
-          </button>
-        </div>
+    <!-- Results section -->
+    <div id="results-section" class="hidden space-y-6">
+
+      <!-- Report header / sim banner -->
+      <div id="sim-banner" class="hidden panel px-4 py-3 flex items-start gap-3">
+        <span class="sim-badge mt-0.5">SIM</span>
+        <p class="text-[var(--muted)]" style="font-size:12px;line-height:1.5">
+          <b class="text-[var(--ink)] mono" id="sim-scenario"></b>
+          — synthetic activation rendered through the real nilearn cortical-surface pipeline.
+          Install TRIBEv2 for live analysis of your own media.
+        </p>
       </div>
 
-      <div class="flex gap-6">
-        <!-- Large brain view -->
-        <div class="flex-shrink-0">
-          <div class="relative rounded-xl overflow-hidden bg-[#0a0a1a]" style="width:240px;height:192px">
-            <img id="brain-frame" class="w-full h-full object-cover" src="" alt="Brain activation"/>
-            <div class="scan-overlay absolute inset-0"></div>
-            <!-- Activation overlay -->
-            <div class="absolute bottom-2 left-2 right-2">
-              <div class="bg-black/60 rounded px-2 py-1">
-                <div class="flex justify-between text-[10px] text-[#a0a0c0] mb-1">
-                  <span>Activation</span>
-                  <span id="act-value">—</span>
-                </div>
-                <div class="bg-[#1a1a1a] rounded-full h-1 overflow-hidden">
-                  <div id="act-bar-fill" class="act-bar h-1" style="width:0%"></div>
-                </div>
+      <!-- Brain Activity -->
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Cortical Activation</h2>
+          <div class="flex items-center gap-3">
+            <span id="timestep-label" class="readout">t=00</span>
+            <button id="play-btn" onclick="togglePlay()" class="btn btn-signal">▶ Play</button>
+            <button onclick="resetPlayer()" class="btn">↺ Reset</button>
+          </div>
+        </div>
+        <div class="p-5 flex gap-6 flex-col lg:flex-row">
+          <!-- Viewport -->
+          <div class="flex-shrink-0">
+            <div class="viewport" style="width:248px;height:198px">
+              <img id="brain-frame" class="w-full h-full object-cover" src="" alt="Cortical activation"/>
+              <div class="scan-overlay absolute inset-0"></div>
+            </div>
+            <div class="flex justify-between mt-2 readout" style="width:248px">
+              <span>HEMI <b>L</b> · LATERAL</span>
+              <span>ACT <b id="act-value">—</b></span>
+            </div>
+            <div class="mt-1" style="width:248px">
+              <div style="height:3px;background:var(--line)"><div id="act-bar-fill" style="height:3px;background:var(--signal);width:0%"></div></div>
+            </div>
+          </div>
+
+          <!-- Signals -->
+          <div class="flex-1 min-w-0 space-y-4">
+            <div id="waveform-block">
+              <p class="kicker mb-1.5">Waveform</p>
+              <div id="waveform-container" class="viewport" style="height:46px">
+                <img id="waveform-img" class="w-full h-full object-fill" src="" alt=""/>
+              </div>
+            </div>
+            <div>
+              <p class="kicker mb-1.5">Transcript</p>
+              <div id="words-strip" class="flex flex-wrap gap-1 min-h-[24px]"></div>
+            </div>
+            <div>
+              <p class="kicker mb-1.5">Frame Sequence</p>
+              <div id="thumb-strip" class="relative flex gap-1.5 overflow-x-auto pb-1 hide-scroll">
+                <div id="timeline-cursor"></div>
               </div>
             </div>
           </div>
-          <p class="text-center text-xs text-[#6060a0] mt-1">Left hemisphere · lateral</p>
         </div>
+      </div>
 
-        <!-- Right: waveform + timeline strip -->
-        <div class="flex-1 min-w-0">
-          <!-- Waveform -->
-          <div class="mb-2">
-            <p class="text-[10px] text-[#404060] uppercase tracking-widest mb-1">Audio</p>
-            <div id="waveform-container" class="rounded-lg overflow-hidden bg-[#0a0a1a]" style="height:44px">
-              <img id="waveform-img" class="w-full h-full object-fill" src="" alt=""/>
+      <!-- Emotional Response -->
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Emotional Response</h2>
+          <span class="kicker">Derived from activation pattern</span>
+        </div>
+        <div class="p-5 flex gap-7 items-center flex-col md:flex-row">
+          <div class="flex-shrink-0 relative" style="width:172px;height:172px">
+            <canvas id="emotion-donut" width="172" height="172"></canvas>
+            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <span id="donut-top-pct" class="mono" style="font-size:26px;font-weight:600;color:var(--ink)">—</span>
+              <span id="donut-top-label" class="mono" style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:2px">—</span>
+              <span id="donut-top-emoji" class="kicker" style="margin-top:3px">dominant</span>
             </div>
           </div>
-
-          <!-- Words timeline -->
-          <div class="mb-2">
-            <p class="text-[10px] text-[#404060] uppercase tracking-widest mb-1">Text</p>
-            <div id="words-strip" class="flex flex-wrap gap-1 min-h-[24px]"></div>
-          </div>
-
-          <!-- Brain thumbnails strip -->
-          <div>
-            <p class="text-[10px] text-[#404060] uppercase tracking-widest mb-1">Brain response</p>
-            <div id="thumb-strip" class="relative flex gap-2 overflow-x-auto pb-1">
-              <div id="timeline-cursor"></div>
-            </div>
-          </div>
+          <div class="flex-1 min-w-0 w-full" id="emotion-bars"></div>
         </div>
+      </div>
+
+      <!-- Region ledger -->
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Top Activated Regions</h2>
+          <div class="flex gap-1.5 flex-wrap" id="cat-filters"></div>
+        </div>
+        <div class="ledger-head">
+          <span>#</span><span>Region / Experience</span><span class="col-code">ROI</span>
+          <span class="col-cat">Category</span><span style="text-align:right">Activation</span><span class="col-meter"></span>
+        </div>
+        <div id="roi-grid"></div>
+      </div>
+
+      <div class="pt-1">
+        <button onclick="resetAll()" class="btn">← New Analysis</button>
       </div>
     </div>
 
-    <!-- ROI panel -->
-    <div>
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-semibold">Top Activated Regions</h2>
-        <div class="flex gap-2 flex-wrap" id="cat-filters"></div>
-      </div>
-      <div id="roi-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
-    </div>
+  </main>
 
-    <!-- New analysis button -->
-    <div class="text-center pt-2">
-      <button onclick="resetAll()"
-        class="bg-[#1a1a35] border border-[var(--border)] text-[#a0a0c0] font-semibold px-6 py-2.5 rounded-xl hover:border-[var(--glow)] hover:text-white transition-all">
-        ← Analyze Another File
-      </button>
-    </div>
-  </div>
-
+  <footer class="max-w-[1120px] mx-auto px-5 py-6 mono text-[var(--faint)]" style="font-size:10.5px;letter-spacing:.05em">
+    BRAINSTIM · META TRIBEv2 · Not a medical tool — exploration only.
+    &nbsp;·&nbsp; POST /api/infer · POST /api/demo · GET /api/job/{id}/stream
+  </footer>
 </div><!-- /layer -->
 
 <script>
-// ── Neural particle background ─────────────────────────────────────────────
+// ── Background: graticule + slow signal sweep ───────────────────────────────
 (function(){
   const c = document.getElementById('neural-bg');
+  if(!c) return;
   const ctx = c.getContext('2d');
-  let W, H, nodes = [];
-
-  function resize(){
-    W = c.width = window.innerWidth;
-    H = c.height = window.innerHeight;
-  }
+  let W, H, sweep = 0;
+  const grid = 46;
+  function resize(){ W = c.width = window.innerWidth; H = c.height = window.innerHeight; }
   resize();
   window.addEventListener('resize', resize);
-
-  for(let i=0;i<60;i++) nodes.push({
-    x: Math.random()*1920, y: Math.random()*1080,
-    vx:(Math.random()-.5)*.3, vy:(Math.random()-.5)*.3,
-    r: Math.random()*2+1
-  });
-
   function draw(){
     ctx.clearRect(0,0,W,H);
-    for(let n of nodes){
-      n.x += n.vx; n.y += n.vy;
-      if(n.x<0||n.x>W) n.vx*=-1;
-      if(n.y<0||n.y>H) n.vy*=-1;
-    }
-    for(let i=0;i<nodes.length;i++){
-      for(let j=i+1;j<nodes.length;j++){
-        const dx=nodes[i].x-nodes[j].x, dy=nodes[i].y-nodes[j].y;
-        const d=Math.sqrt(dx*dx+dy*dy);
-        if(d<180){
-          ctx.beginPath();
-          ctx.strokeStyle=`rgba(123,94,167,${0.4*(1-d/180)})`;
-          ctx.lineWidth=0.5;
-          ctx.moveTo(nodes[i].x,nodes[i].y);
-          ctx.lineTo(nodes[j].x,nodes[j].y);
-          ctx.stroke();
-        }
-      }
-      ctx.beginPath();
-      ctx.arc(nodes[i].x,nodes[i].y,nodes[i].r,0,Math.PI*2);
-      ctx.fillStyle='rgba(183,148,255,0.6)';
-      ctx.fill();
-    }
+    ctx.strokeStyle = 'rgba(255,255,255,0.022)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for(let x=0;x<=W;x+=grid){ ctx.moveTo(x+0.5,0); ctx.lineTo(x+0.5,H); }
+    for(let y=0;y<=H;y+=grid){ ctx.moveTo(0,y+0.5); ctx.lineTo(W,y+0.5); }
+    ctx.stroke();
+    // slow vertical sweep
+    sweep = (sweep + 0.45) % (W + 240);
+    const g = ctx.createLinearGradient(sweep-160, 0, sweep, 0);
+    g.addColorStop(0, 'rgba(255,94,26,0)');
+    g.addColorStop(1, 'rgba(255,94,26,0.045)');
+    ctx.fillStyle = g; ctx.fillRect(sweep-160, 0, 160, H);
+    ctx.fillStyle = 'rgba(255,94,26,0.12)'; ctx.fillRect(sweep, 0, 1, H);
     requestAnimationFrame(draw);
   }
   draw();
@@ -396,6 +449,7 @@
 // ── State ──────────────────────────────────────────────────────────────────
 let frames = [], words = [], currentFrame = 0, playInterval = null, isPlaying = false;
 let allRegions = [], activeFilter = null;
+const pad2 = n => String(n).padStart(2,'0');
 
 // ── Upload handling ────────────────────────────────────────────────────────
 const dropZone = document.getElementById('drop-zone');
@@ -418,12 +472,10 @@ async function handleFile(file){
     return;
   }
 
-  // Show processing
   document.getElementById('upload-section').classList.add('hidden');
   document.getElementById('processing-section').classList.remove('hidden');
-  document.getElementById('processing-file').textContent = `📄 ${file.name}`;
+  document.getElementById('processing-file').textContent = `INPUT / ${file.name}`;
 
-  // Upload
   const form = new FormData();
   form.append('file', file);
   let jobId;
@@ -437,14 +489,55 @@ async function handleFile(file){
     return;
   }
 
-  // Stream progress
-  fileInput.value = '';  // Reset so same file can be re-uploaded
+  fileInput.value = '';
+  streamJob(jobId);
+}
+
+// ── Demo / simulation mode ───────────────────────────────────────────────────
+async function loadSamples(){
+  const grid = document.getElementById('sample-grid');
+  if(!grid) return;
+  try {
+    const samples = await (await fetch('/api/samples')).json();
+    grid.innerHTML = '';
+    samples.forEach((s, i) => {
+      const row = document.createElement('button');
+      row.className = 'stim-row';
+      row.style.setProperty('--accent', s.accent || 'var(--signal)');
+      row.onclick = () => runDemo(s.id, s.title);
+      row.innerHTML = `
+        <span class="stim-idx mono">${pad2(i+1)}</span>
+        <span class="stim-title">${s.title}</span>
+        <span class="stim-sub mono">${s.subtitle || ''}</span>
+        <span class="stim-type mono" style="color:${s.accent}">${(s.media_type||'').toUpperCase()}</span>
+        <span class="stim-go mono">RUN ▸</span>`;
+      grid.appendChild(row);
+    });
+  } catch(e) { grid.innerHTML = '<p class="mono text-[var(--faint)] p-4" style="font-size:11px">Samples unavailable.</p>'; }
+}
+
+async function runDemo(scenarioId, title){
+  document.getElementById('upload-section').classList.add('hidden');
+  document.getElementById('processing-section').classList.remove('hidden');
+  document.getElementById('processing-file').textContent = `STIMULUS / ${title}`;
+  document.getElementById('processing-sim').classList.remove('hidden');
+  try {
+    const res = await fetch(`/api/demo?scenario_id=${encodeURIComponent(scenarioId)}`, {method:'POST'});
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.detail || 'Could not start demo');
+    streamJob(data.job_id);
+  } catch(e) { showError(e.message); }
+}
+
+// ── Shared progress stream (real + demo jobs) ────────────────────────────────
+function streamJob(jobId){
   const es = new EventSource(`/api/job/${jobId}/stream`);
   es.onmessage = async (e) => {
     const job = JSON.parse(e.data);
-    document.getElementById('processing-message').textContent = job.message || '…';
+    document.getElementById('processing-message').textContent = (job.message || '…').replace(/[.…]+$/,'');
     document.getElementById('progress-bar').style.width = (job.progress||0)+'%';
     document.getElementById('progress-pct').textContent = (job.progress||0)+'%';
+    if(job.simulated) document.getElementById('processing-sim').classList.remove('hidden');
 
     if(job.status === 'done'){
       es.close();
@@ -465,48 +558,42 @@ async function loadResults(jobId){
   words = data.words || [];
   allRegions = data.top_regions || [];
 
-  // Waveform
-  if(data.waveform){
-    document.getElementById('waveform-img').src = 'data:image/png;base64,'+data.waveform;
-    document.getElementById('waveform-container').style.display = '';
+  const banner = document.getElementById('sim-banner');
+  if(data.simulated){
+    document.getElementById('sim-scenario').textContent = data.scenario || 'Simulated stimulus';
+    banner.classList.remove('hidden');
   } else {
-    document.getElementById('waveform-container').style.display = 'none';
+    banner.classList.add('hidden');
   }
 
-  // Build thumbnail strip
+  if(data.waveform){
+    document.getElementById('waveform-img').src = 'data:image/png;base64,'+data.waveform;
+    document.getElementById('waveform-block').style.display = '';
+  } else {
+    document.getElementById('waveform-block').style.display = 'none';
+  }
+
   buildThumbStrip();
-
-  // Build word strip
   buildWordStrip();
-
-  // Build ROI panel
   buildROIPanel();
-
-  // Build emotion summary
   buildEmotionPanel(data.emotions || []);
-
-  // Show first frame
   setFrame(0);
 
-  // Transition
   document.getElementById('processing-section').classList.add('hidden');
   document.getElementById('results-section').classList.remove('hidden');
 
-  // Auto-play
   setTimeout(() => { isPlaying = false; togglePlay(); }, 500);
 }
 
 function buildThumbStrip(){
   const strip = document.getElementById('thumb-strip');
-  // Remove old thumbs (keep cursor)
   strip.querySelectorAll('.brain-thumb').forEach(el=>el.remove());
-
   frames.forEach((b64, i) => {
     const img = document.createElement('img');
     img.className = 'brain-thumb';
-    img.style.cssText = 'width:80px;height:64px;object-fit:cover';
+    img.style.cssText = 'width:62px;height:50px;object-fit:cover';
     img.src = 'data:image/png;base64,'+b64;
-    img.title = `t=${i}s`;
+    img.title = `t=${pad2(i)}`;
     img.onclick = () => { stopPlay(); setFrame(i); };
     strip.appendChild(img);
   });
@@ -515,6 +602,7 @@ function buildThumbStrip(){
 function buildWordStrip(){
   const strip = document.getElementById('words-strip');
   strip.innerHTML = '';
+  if(!words.length){ strip.innerHTML = '<span class="mono text-[var(--faint)]" style="font-size:11px">— none —</span>'; return; }
   words.forEach((w, i) => {
     const span = document.createElement('span');
     span.className = 'word-token';
@@ -526,7 +614,6 @@ function buildWordStrip(){
 }
 
 function buildROIPanel(){
-  // Category filter buttons
   const cats = [...new Set(allRegions.map(r=>r.category))];
   const filterDiv = document.getElementById('cat-filters');
   filterDiv.innerHTML = '';
@@ -534,25 +621,21 @@ function buildROIPanel(){
     const btn = document.createElement('button');
     btn.textContent = cat;
     btn.dataset.cat = cat;
-    btn.className = `text-xs px-2 py-1 rounded-full border border-[var(--border)] text-[#8080a0] hover:border-[var(--glow)] transition-colors cat-filter-btn`;
+    btn.className = 'cat-filter-btn';
     btn.onclick = () => filterByCategory(cat);
     filterDiv.appendChild(btn);
   });
-
   renderROICards(allRegions);
 }
 
 function filterByCategory(cat){
   if(activeFilter === cat){
     activeFilter = null;
-    document.querySelectorAll('.cat-filter-btn').forEach(b => b.classList.remove('border-[var(--glow-bright)]','text-white'));
+    document.querySelectorAll('.cat-filter-btn').forEach(b => b.classList.remove('on'));
     renderROICards(allRegions);
   } else {
     activeFilter = cat;
-    document.querySelectorAll('.cat-filter-btn').forEach(b => {
-      b.classList.toggle('border-[var(--glow-bright)]', b.dataset.cat === cat);
-      b.classList.toggle('text-white', b.dataset.cat === cat);
-    });
+    document.querySelectorAll('.cat-filter-btn').forEach(b => b.classList.toggle('on', b.dataset.cat === cat));
     renderROICards(allRegions.filter(r=>r.category===cat));
   }
 }
@@ -561,33 +644,23 @@ function renderROICards(regions){
   const maxAct = Math.max(...regions.map(r=>r.activation), 1e-6);
   const grid = document.getElementById('roi-grid');
   grid.innerHTML = '';
-
   regions.forEach((r, i) => {
     const pct = Math.min(100, (r.activation / maxAct)*100).toFixed(1);
-    const catClass = 'cat-'+(r.category||'other').toLowerCase();
-    const card = document.createElement('div');
-    card.className = `roi-card p-4 ${catClass}`;
-    card.innerHTML = `
-      <div class="flex items-start justify-between mb-2">
-        <div>
-          <span class="text-[10px] uppercase tracking-widest opacity-60">${r.category}</span>
-          <p class="font-semibold text-sm leading-tight">${r.name}</p>
-          <p class="text-[10px] text-[#6060a0] font-mono mt-0.5">${r.roi}</p>
-        </div>
-        <span class="text-lg font-bold opacity-80">#${i+1}</span>
+    const catClass = 'ct-'+(r.category||'other').toLowerCase();
+    const row = document.createElement('div');
+    row.className = `roi-row ${catClass}`;
+    row.innerHTML = `
+      <span class="roi-rank">${pad2(i+1)}</span>
+      <div>
+        <div class="roi-name">${r.name}</div>
+        <div class="roi-exp">${r.experience}</div>
       </div>
-      <p class="text-xs text-[#a0a0b0] mb-3 italic">"${r.experience}"</p>
-      <div class="mb-1">
-        <div class="flex justify-between text-[10px] text-[#6060a0] mb-1">
-          <span>Activation</span><span>${r.activation.toFixed(4)}</span>
-        </div>
-        <div class="bg-[#0a0a1a] rounded-full h-1 overflow-hidden">
-          <div class="act-bar" style="width:${pct}%"></div>
-        </div>
-      </div>
-      ${r.tip ? `<p class="text-[10px] text-[#5050a0] mt-2">💡 ${r.tip}</p>` : ''}
+      <span class="roi-code col-code">${r.roi}</span>
+      <span class="col-cat"><span class="roi-cat">${r.category}</span></span>
+      <span class="roi-act">${r.activation.toFixed(4)}</span>
+      <span class="col-meter"><span class="roi-meter"><span class="roi-mfill" style="width:${pct}%"></span></span></span>
     `;
-    grid.appendChild(card);
+    grid.appendChild(row);
   });
 }
 
@@ -603,31 +676,20 @@ function setFrame(i){
     img.classList.remove('flash');
   }, 80);
 
-  document.getElementById('timestep-label').textContent = `t=${i}s`;
+  document.getElementById('timestep-label').textContent = `t=${pad2(i)}/${pad2(frames.length-1)}`;
 
-  // Update activation bar (approximate from frame index)
   const pct = ((i+1)/frames.length)*100;
   document.getElementById('act-bar-fill').style.width = pct+'%';
   document.getElementById('act-value').textContent = (0.3 + 0.5*(i/frames.length)).toFixed(2);
 
-  // Highlight active thumb
-  document.querySelectorAll('.brain-thumb').forEach((el,j) => {
-    el.classList.toggle('active', j===i);
-  });
+  document.querySelectorAll('.brain-thumb').forEach((el,j) => el.classList.toggle('active', j===i));
 
-  // Scroll thumb into view
   const thumbs = document.querySelectorAll('.brain-thumb');
   if(thumbs[i]) thumbs[i].scrollIntoView({behavior:'smooth', block:'nearest', inline:'center'});
 
-  // Move cursor on timeline
-  const strip = document.getElementById('thumb-strip');
   const cursor = document.getElementById('timeline-cursor');
-  if(thumbs[i]){
-    const left = thumbs[i].offsetLeft + thumbs[i].offsetWidth/2;
-    cursor.style.left = left + 'px';
-  }
+  if(thumbs[i]) cursor.style.left = (thumbs[i].offsetLeft + thumbs[i].offsetWidth/2) + 'px';
 
-  // Activate words at this timestep
   document.querySelectorAll('.word-token').forEach(el => {
     const start = parseFloat(el.dataset.start||0);
     el.classList.toggle('active', start >= i && start < i+1);
@@ -658,6 +720,7 @@ function resetPlayer(){ stopPlay(); setFrame(0); }
 function showError(msg){
   document.getElementById('processing-section').classList.add('hidden');
   document.getElementById('results-section').classList.add('hidden');
+  document.getElementById('processing-sim').classList.add('hidden');
   document.getElementById('upload-section').classList.remove('hidden');
   fileInput.value = '';
   alert('Error: ' + msg);
@@ -667,49 +730,36 @@ function resetAll(){
   stopPlay();
   frames = []; words = []; currentFrame = 0;
   document.getElementById('results-section').classList.add('hidden');
+  document.getElementById('processing-sim').classList.add('hidden');
   document.getElementById('upload-section').classList.remove('hidden');
   fileInput.value = '';
 }
 
 // ── Emotion visualization ──────────────────────────────────────────────────
-const EMOTION_EMOJI = {
-  Joy: '😊', Curiosity: '🔍', Tension: '😰', Calm: '😌',
-  Engagement: '🎯', Empathy: '🤝', Nostalgia: '💭', Awe: '🤩',
-  Disgust: '😖', Boredom: '😐'
-};
-
 function buildEmotionPanel(emotions){
   if(!emotions.length) return;
-
-  // Donut chart
   drawDonut(emotions);
 
-  // Center label — top emotion
   const top = emotions[0];
-  document.getElementById('donut-top-emoji').textContent = EMOTION_EMOJI[top.emotion] || '';
-  document.getElementById('donut-top-label').textContent = top.emotion;
   document.getElementById('donut-top-pct').textContent = top.percentage + '%';
+  document.getElementById('donut-top-label').textContent = top.emotion;
 
-  // Bar list
   const container = document.getElementById('emotion-bars');
   container.innerHTML = '';
   emotions.forEach(em => {
     if(em.percentage < 1) return;
     const row = document.createElement('div');
-    row.className = 'flex items-center gap-3';
+    row.className = 'emo-row';
     row.innerHTML = `
-      <span class="text-lg w-7 text-center">${EMOTION_EMOJI[em.emotion]||''}</span>
-      <div class="flex-1 min-w-0">
-        <div class="flex justify-between text-sm mb-0.5">
-          <span class="font-medium">${em.emotion}</span>
-          <span class="text-[#8080a0]">${em.percentage}%</span>
+      <span class="emo-swatch" style="background:${em.color}"></span>
+      <div class="min-w-0">
+        <div class="flex justify-between items-baseline mb-1">
+          <span class="mono" style="font-size:12px;letter-spacing:.06em;color:var(--ink)">${em.emotion}</span>
+          <span class="mono" style="font-size:12px;color:var(--muted)">${em.percentage.toFixed(1)}%</span>
         </div>
-        <div class="bg-[#0a0a1a] rounded-full h-2 overflow-hidden">
-          <div class="h-2 rounded-full transition-all duration-700" style="width:${em.percentage}%;background:${em.color}"></div>
-        </div>
-        <p class="text-[10px] text-[#6060a0] mt-0.5">${em.description}</p>
-      </div>
-    `;
+        <div class="emo-meter"><div class="emo-fill" style="width:${em.percentage}%;background:${em.color}"></div></div>
+        <p class="text-[var(--faint)] mt-1" style="font-size:10.5px">${em.description}</p>
+      </div>`;
     container.appendChild(row);
   });
 }
@@ -717,34 +767,32 @@ function buildEmotionPanel(emotions){
 function drawDonut(emotions){
   const canvas = document.getElementById('emotion-donut');
   const ctx = canvas.getContext('2d');
-  const cx = 100, cy = 100, r = 80, thickness = 22;
-
-  ctx.clearRect(0, 0, 200, 200);
-
+  const cx = 86, cy = 86, r = 72, thickness = 13;
+  ctx.clearRect(0, 0, 172, 172);
   let startAngle = -Math.PI / 2;
   emotions.forEach(em => {
     if(em.percentage < 0.5) return;
     const sweep = (em.percentage / 100) * 2 * Math.PI;
     const endAngle = startAngle + sweep;
-
     ctx.beginPath();
     ctx.arc(cx, cy, r, startAngle, endAngle);
     ctx.arc(cx, cy, r - thickness, endAngle, startAngle, true);
     ctx.closePath();
     ctx.fillStyle = em.color;
     ctx.fill();
-
-    // Gap between segments
+    // hairline gap in bg color
     ctx.beginPath();
-    ctx.arc(cx, cy, r, endAngle - 0.01, endAngle + 0.01);
-    ctx.arc(cx, cy, r - thickness, endAngle + 0.01, endAngle - 0.01, true);
+    ctx.arc(cx, cy, r, endAngle - 0.012, endAngle + 0.012);
+    ctx.arc(cx, cy, r - thickness, endAngle + 0.012, endAngle - 0.012, true);
     ctx.closePath();
-    ctx.fillStyle = '#0e0e1f';
+    ctx.fillStyle = '#0a0b0d';
     ctx.fill();
-
     startAngle = endAngle;
   });
 }
+
+// Populate the stimulus manifest on load
+loadSamples();
 </script>
 </body>
 </html>

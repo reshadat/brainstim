@@ -14,8 +14,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+import demo
 from data import BRAIN_FEELINGS
-from inference import jobs, start_job
+from inference import jobs, start_demo_job, start_job
 
 # ── app ───────────────────────────────────────────────────────────────────────
 
@@ -91,6 +92,40 @@ async def infer(file: UploadFile = File(...)):
         "file_type": file_type,
     }
     start_job(job_id, str(dest), file_type)
+    return JSONResponse({"job_id": job_id})
+
+
+@app.get("/api/samples", summary="List sample stimuli for simulation mode")
+async def list_samples():
+    """
+    Sample stimuli that can be analyzed in simulation mode (no TRIBEv2
+    required) — used to populate the demo gallery.
+    """
+    return JSONResponse(demo.list_stimuli())
+
+
+@app.post("/api/demo", summary="Run a simulated analysis on a sample stimulus")
+async def run_demo(scenario_id: str):
+    """
+    Start a fully simulated analysis for one of the sample stimuli. Produces
+    realistic brain visualizations and region/emotion breakdowns without the
+    TRIBEv2 model. Returns `job_id` — poll/stream it exactly like a real job.
+    """
+    scenario = demo.get_scenario(scenario_id)
+    if scenario is None:
+        raise HTTPException(404, f"Unknown sample '{scenario_id}'")
+
+    job_id = str(uuid.uuid4())
+    jobs[job_id] = {
+        "id": job_id,
+        "status": "queued",
+        "progress": 0,
+        "message": "Queued…",
+        "filename": scenario["title"],
+        "file_type": scenario["media_type"],
+        "simulated": True,
+    }
+    start_demo_job(job_id, scenario)
     return JSONResponse({"job_id": job_id})
 
 

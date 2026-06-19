@@ -10,6 +10,7 @@ from typing import Dict, Any
 
 import numpy as np
 
+import demo
 from data import BRAIN_FEELINGS, STIMULATION_TIPS, EMOTION_CIRCUITS
 from rendering import render_brain_frame, render_waveform
 
@@ -131,7 +132,15 @@ def run_inference(job_id: str, file_path: str, file_type: str):
     job = jobs[job_id]
     try:
         _update(job, "loading_model", 5, "Loading TRIBEv2 model (first run downloads ~500 MB)…")
-        from tribev2 import TribeModel
+        try:
+            from tribev2 import TribeModel
+        except ImportError:
+            # TRIBEv2 isn't installed — fall back to simulation so the UI
+            # still works end-to-end with realistic synthetic results.
+            return _run_simulation(
+                job_id, demo.fallback_scenario(file_type, job.get("filename", "upload")),
+                note="TRIBEv2 not installed — showing a simulation",
+            )
         model = TribeModel.from_pretrained(
             "facebook/tribev2", cache_folder=str(CACHE_DIR)
         )
@@ -199,8 +208,43 @@ def run_inference(job_id: str, file_path: str, file_type: str):
         )
 
 
+def _run_simulation(job_id: str, scenario: dict, note: str = ""):
+    """Generate a synthetic result (no TRIBEv2) and persist it like a real job."""
+    job = jobs[job_id]
+    try:
+        job["simulated"] = True
+        if note:
+            job["note"] = note
+
+        def cb(pct: int, msg: str):
+            _update(job, "rendering" if pct >= 60 else "predicting", pct, msg)
+
+        _update(job, "loading_model", 8, note or "Starting simulation…")
+        result = demo.generate_demo_result(scenario, progress_cb=cb)
+
+        rpath = RESULTS_DIR / f"{job_id}.json"
+        with open(rpath, "w") as f:
+            json.dump(result, f)
+        job["result_path"] = str(rpath)
+        _update(job, "done", 100, "Simulation complete!")
+    except Exception as e:
+        job.update(
+            status="error",
+            error=str(e),
+            _traceback=traceback.format_exc(),
+            message=f"Error: {e}",
+        )
+
+
 def start_job(job_id: str, file_path: str, file_type: str):
     t = threading.Thread(
         target=run_inference, args=(job_id, file_path, file_type), daemon=True
+    )
+    t.start()
+
+
+def start_demo_job(job_id: str, scenario: dict):
+    t = threading.Thread(
+        target=_run_simulation, args=(job_id, scenario), daemon=True
     )
     t.start()
