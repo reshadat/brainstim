@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="120" viewBox="0 0 560 120">
+  <defs>
+    <linearGradient id="heat" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#8b5cf6"/>
+      <stop offset="0.55" stop-color="#f43f8e"/>
+      <stop offset="1" stop-color="#fbbf24"/>
+    </linearGradient>
+  </defs>
+  <g>
+    <rect x="24"  y="52" width="10" height="16" rx="5" fill="#6b6b74"/>
+    <rect x="40"  y="44" width="10" height="32" rx="5" fill="#6b6b74"/>
+    <rect x="56"  y="30" width="10" height="60" rx="5" fill="url(#heat)"/>
+    <rect x="72"  y="16" width="10" height="88" rx="5" fill="url(#heat)"/>
+    <rect x="88"  y="30" width="10" height="60" rx="5" fill="url(#heat)"/>
+    <rect x="104" y="44" width="10" height="32" rx="5" fill="#6b6b74"/>
+    <rect x="120" y="52" width="10" height="16" rx="5" fill="#6b6b74"/>
+  </g>
+  <text x="152" y="78" font-family="Helvetica, Arial, sans-serif" font-weight="800" font-size="52" letter-spacing="-1.5" fill="#f2f2f4">BrainStim</text>
+</svg>

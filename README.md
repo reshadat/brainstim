@@ -1,8 +1,23 @@
-# BrainStim
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <img src="assets/logo.svg" width="420" alt="BrainStim">
+  </picture>
+</p>
 
-Upload a video, audio clip, or piece of text and see which parts of your brain it activates — predicted fMRI activity mapped to real psychological experiences.
+<p align="center">
+  <img src="https://img.shields.io/badge/license-MIT-16161a?style=flat-square" alt="MIT">
+  <img src="https://img.shields.io/badge/python-3.10%2B-16161a?style=flat-square" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/backend-FastAPI-16161a?style=flat-square" alt="FastAPI">
+  <img src="https://img.shields.io/badge/model-Meta%20TRIBEv2-e11d74?style=flat-square" alt="TRIBEv2">
+  <img src="https://img.shields.io/badge/GPU-not%20required%20(simulation%20mode)-16161a?style=flat-square" alt="Simulation mode">
+</p>
 
-Built on [META TRIBEv2](https://github.com/facebookresearch/tribev2), the state-of-the-art brain encoding model from Meta AI Research.
+<p align="center"><b>See what a video, a song, or a poem does to a brain.</b></p>
+
+Upload a video, audio clip, or piece of text and watch which parts of your brain it activates — predicted fMRI activity across 20,484 cortical vertices, mapped to 360 named regions and translated into psychological experiences.
+
+Built on [Meta TRIBEv2](https://github.com/facebookresearch/tribev2), the state-of-the-art brain encoding model from Meta AI Research.
 
 **Not a medical tool.** Exploration and creative use only.
 
